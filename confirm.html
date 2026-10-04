@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>確認登入 | WCEC</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap" id="app" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="demo/gas-shim.js"></script>
+<script src="common.js"></script>
+<script>
+/*
+ * 家長在 Email 裡按「確認是我」會打開這一頁。
+ * 打開頁面「不算」確認，一定要按按鈕才算：
+ * 有些 Email 系統會先自動打開信裡的連結做安全檢查，這樣它們就不會誤幫家長登入。
+ */
+(function () {
+  var W = WCEC, t = W.t, esc = W.esc;
+  var app = document.getElementById('app');
+  var qs = new URLSearchParams(location.search);
+  var r = qs.get('r'), k = qs.get('k');
+  var state = 'loading', num = '';
+
+  function render() {
+    var h = '<header class="top"><div><h1>' + t('cf_title') + '</h1><p class="sub">' + t('pz_sub') + '</p></div>' +
+      '<button class="btn ghost small langbtn" id="lang" type="button">' + t('lang_btn') + '</button></header>' + W.demoBar();
+    if (state === 'loading') h += '<p class="center"><span class="spinner"></span></p>';
+    if (state === 'ask') h += '<section class="card center"><p>' + t('cf_num') + '</p><div class="bignum">' + esc(num) + '</div>' +
+      '<p>' + t('cf_hint') + '</p><button class="btn block" id="yes" type="button">' + t('cf_btn') + '</button></section>';
+    if (state === 'busy') h += '<p class="center"><span class="spinner"></span></p>';
+    if (state === 'done') h += '<section class="card big-ok"><div class="icon" aria-hidden="true">✅</div><h2>' + t('cf_done_title') + '</h2><p>' + t('cf_done_body') + '</p></section>';
+    if (state === 'expired') h += '<div class="banner err" role="alert">' + t('cf_expired') + '</div>';
+    app.innerHTML = h;
+    document.getElementById('lang').onclick = function () { W.setLang(W.lang() === 'en' ? 'zh' : 'en'); render(); };
+    var y = document.getElementById('yes');
+    if (y) y.onclick = function () {
+      state = 'busy'; render();
+      W.call('loginApprove', { r: r, k: k }).then(function (res) { state = res.ok ? 'done' : 'expired'; render(); });
+    };
+  }
+
+  render();
+  W.call('loginPeek', { r: r, k: k }).then(function (res) {
+    if (!res.ok) state = 'expired';
+    else { num = res.num; state = res.approved ? 'done' : 'ask'; }
+    render();
+  });
+})();
+</script>
+</body>
+</html>

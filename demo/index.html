@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>示範工具 | WCEC</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+  .wrap { max-width: 1100px; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .tabs button[aria-selected="true"] { background: var(--brand); color: var(--brand-ink); }
+  .mail { border: 1px solid var(--line); border-radius: 14px; margin: 12px 0; background: var(--card); overflow: hidden; }
+  .mail .hd { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 17px; }
+  .mail iframe { width: 100%; border: 0; height: 420px; background: #fff; }
+  .tbl { overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin-bottom: 24px; }
+  table { border-collapse: collapse; font-size: 15px; min-width: 100%; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 10px; text-align: left; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  th { background: var(--brand-soft); position: sticky; top: 0; }
+  .pages a { margin-right: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top"><div><h1>示範工具</h1><p class="sub">模擬信箱（代替真的 Email）和試算表內容。資料只存在這台電腦的瀏覽器。</p></div></header>
+  <p class="pages">開啟頁面：<a href="../register.html" target="_blank">報名表</a> <a href="../parent.html" target="_blank">家長專區</a>
+    <a href="../parent.html?embed=1" target="_blank">家長專區（App 嵌入樣式）</a> <a href="../checkin.html" target="_blank">簽到站</a>（密碼 123456）</p>
+  <p class="hint">測試用的現有家庭：陳大明 chen.daming@gmail.com（302-555-1234，孩子 陳小安、陳小樂）、林美華 meihua.lin@yahoo.com、David Lee davidlee@outlook.com（孩子 Ethan Lee，去年報名）</p>
+  <div class="tabs" role="tablist">
+    <button class="btn ghost small" data-tab="mail" type="button">模擬信箱</button>
+    <button class="btn ghost small" data-tab="sheets" type="button">試算表內容</button>
+    <button class="btn ghost small" id="reset" type="button">重設示範資料</button>
+  </div>
+  <div id="out"></div>
+</div>
+<script src="gas-shim.js"></script>
+<script>
+(function () {
+  var tab = 'mail', out = document.getElementById('out'), lastSig = '';
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function fmt(v) { return v instanceof Date ? v.toLocaleString('zh-TW', { hour12: false }) : v; }
+
+  function draw(force) {
+    WCEC_DEMO.snapshot().then(function (s) {
+      var sig = tab + JSON.stringify(s.outbox.length) + JSON.stringify(s.sheets).length;
+      if (!force && sig === lastSig) return;
+      lastSig = sig;
+      document.querySelectorAll('[data-tab]').forEach(function (b) { b.setAttribute('aria-selected', b.getAttribute('data-tab') === tab); });
+      if (tab === 'mail') {
+        out.innerHTML = s.outbox.length ? s.outbox.map(function (m, i) {
+          return '<div class="mail"><div class="hd"><b>' + esc(m.subject) + '</b><br>寄給：' + esc(m.to) + ' · ' + esc(fmt(m.time)) + '</div>' +
+            '<iframe data-i="' + i + '" title="email"></iframe></div>';
+        }).join('') : '<p>還沒有信。到家長專區輸入 Email 試試看。</p>';
+        out.querySelectorAll('iframe').forEach(function (f) {
+          var m = s.outbox[+f.getAttribute('data-i')];
+          f.srcdoc = '<base target="_blank">' + (m.html || '<pre style="font:16px sans-serif;white-space:pre-wrap">' + esc(m.text) + '</pre>');
+        });
+      } else {
+        out.innerHTML = s.order.map(function (name) {
+          var rows = s.sheets[name];
+          if (!rows.length) return '';
+          return '<h2>' + esc(name) + '</h2><div class="tbl"><table><thead><tr>' + rows[0].map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') +
+            '</tr></thead><tbody>' + rows.slice(1).map(function (r) {
+              return '<tr>' + rows[0].map(function (_, j) { return '<td title="' + esc(fmt(r[j])) + '">' + esc(fmt(r[j])) + '</td>'; }).join('') + '</tr>';
+            }).join('') + '</tbody></table></div>';
+        }).join('');
+      }
+    });
+  }
+  document.querySelectorAll('[data-tab]').forEach(function (b) { b.onclick = function () { tab = b.getAttribute('data-tab'); draw(true); }; });
+  document.getElementById('reset').onclick = function () { WCEC_DEMO.reset().then(function () { draw(true); }); };
+  draw(true);
+  setInterval(draw, 2000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WCEC 兒童事工</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .hub { display: grid; gap: 16px; margin-top: 16px; }
+  .hub a.tile { display: block; text-decoration: none; color: var(--ink); background: var(--card); border: 1px solid var(--line);
+    border-left: 6px solid var(--gold); border-radius: var(--radius); padding: 22px 20px; }
+  .hub a.tile b { display: block; font-size: 26px; }
+  .hub a.tile span { color: var(--muted); }
+  .staff { margin-top: 40px; text-align: center; }
+  .staff a { color: var(--muted); font-size: 17px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script src="config.js"></script>
+<script src="demo/gas-shim.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  var W = WCEC, app = document.getElementById('app');
+  var T = {
+    zh: { title: '兒童事工', sub: '威明頓主恩堂', reg: 'Awana 報名', reg_d: '第一次參加的家庭，請從這裡報名',
+          pz: '家長專區', pz_d: '看孩子的資料、家庭簽到卡，修改聯絡資料', staff: '同工：前台簽到站' },
+    en: { title: 'Children\'s Ministry', sub: 'WCEC', reg: 'Awana Registration', reg_d: 'New families, start here',
+          pz: 'Parent Area', pz_d: 'Your children, family check-in card, and contact info', staff: 'Staff: check-in station' },
+  };
+  function render() {
+    var s = T[W.lang()];
+    app.innerHTML = '<header class="top"><div><h1>' + s.title + '</h1><p class="sub">' + s.sub + '</p></div>' +
+      '<button class="btn ghost small langbtn" id="lang" type="button">' + W.t('lang_btn') + '</button></header>' + W.demoBar() +
+      '<div class="hub"><a class="tile" href="' + W.link('register.html') + '"><b>' + s.reg + '</b><span>' + s.reg_d + '</span></a>' +
+      '<a class="tile" href="' + W.link('parent.html') + '"><b>' + s.pz + '</b><span>' + s.pz_d + '</span></a></div>' +
+      '<p class="staff"><a href="checkin.html">' + s.staff + '</a></p>';
+    document.getElementById('lang').onclick = function () { W.setLang(W.lang() === 'en' ? 'zh' : 'en'); render(); };
+  }
+  render();
+})();
+</script>
+</body>
+</html>

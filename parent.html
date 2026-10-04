@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>家長專區 | WCEC</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap" id="app" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="demo/gas-shim.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  var W = WCEC, t = W.t, esc = W.esc;
+  var app = document.getElementById('app');
+  var qs = new URLSearchParams(location.search);
+
+  var view = 'loading';            // loading | login | wait | home
+  var data = null;                 // 家庭資料
+  var err = '';
+  var email = W.store('wcec_last_email') || '';
+  var wait = null;                 // { rid, num, masked }
+  var pollTimer = null, busy = false;
+
+  // 從報名頁過來，已經寄出確認信
+  if (qs.get('rid')) {
+    wait = { rid: qs.get('rid'), num: qs.get('num'), masked: qs.get('m') };
+    history.replaceState(null, '', W.link('parent.html'));   // 網址不留登入代號
+  }
+
+  function go(v) { view = v; render(); }
+
+  function header() {
+    return '<header class="top"><div><h1>' + t('pz_title') + '</h1><p class="sub">' + t('pz_sub') + '</p></div>' +
+      '<button class="btn ghost small langbtn" id="lang" type="button">' + t('lang_btn') + '</button></header>' + W.demoBar();
+  }
+
+  function render() {
+    clearInterval(pollTimer);
+    var h = header();
+    if (err) h += '<div class="banner err" role="alert">' + esc(err) + '</div>';
+    h += views[view]();
+    app.innerHTML = h;
+    var lb = document.getElementById('lang');
+    if (lb) lb.onclick = function () { W.setLang(W.lang() === 'en' ? 'zh' : 'en'); render(); };
+    (binds[view] || function () {})();
+  }
+
+  var views = {
+    loading: function () { return '<p class="center" style="margin-top:48px"><span class="spinner"></span></p>'; },
+
+    login: function () {
+      return '<section class="card"><h2>' + t('pz_login_title') + '</h2><p>' + t('pz_login_hint') + '</p>' +
+        '<form id="lf" novalidate><label class="f" for="em">' + t('email') + '</label>' +
+        '<input id="em" type="email" autocomplete="email" inputmode="email" value="' + esc(email) + '">' +
+        '<p></p><button class="btn block" type="submit"' + (busy ? ' disabled' : '') + '>' + (busy ? t('pz_sending') : t('pz_send')) + '</button></form></section>' +
+        '<div class="divider">' + t('pz_first_time') + '</div>' +
+        '<a class="btn ghost block" href="' + W.link('register.html') + '">' + t('pz_register') + '</a>';
+    },
+
+    wait: function () {
+      return '<section class="card center"><h2>' + t('pz_wait_title') + '</h2>' +
+        '<p>' + t('pz_wait_body', { email: '<b>' + esc(wait.masked) + '</b>' }) + '</p>' +
+        '<p>' + t('pz_wait_num') + '</p><div class="bignum" aria-label="' + esc(wait.num) + '">' + esc(wait.num) + '</div>' +
+        '<p><span class="spinner"></span></p><p class="hint">' + t('pz_wait_auto') + '</p></section>' +
+        '<section class="card"><form id="cf" novalidate><label class="f" for="code">' + t('pz_code_label') + '</label>' +
+        '<input id="code" class="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6">' +
+        '<p></p><button class="btn block" type="submit"' + (busy ? ' disabled' : '') + '>' + t('pz_code_btn') + '</button></form>' +
+        '<p class="hint">' + t('pz_spam') + '</p></section>' +
+        '<div class="row"><button class="btn ghost" id="resend" type="button">' + t('pz_resend') + '</button>' +
+        '<button class="btn ghost" id="other" type="button">' + t('pz_other_email') + '</button></div>';
+    },
+
+    home: function () {
+      var d = data, f = d.family;
+      var h = '<h2 style="margin-top:8px">' + t('pz_hello') + '</h2>';
+
+      // 孩子
+      h += '<div class="sec-head"><h2>' + t('pz_kids') + '</h2></div>';
+      if (!d.kids.length) h += '<p>' + t('pz_no_kids') + '</p>';
+      d.kids.forEach(function (k, i) {
+        h += '<div class="pkid"><div><div class="nm">' + esc(k.name) + (k.enName ? '<small>' + esc(k.enName) + '</small>' : '') + '</div>' +
+          '<div class="meta">' + esc(gradeLabel(k.grade)) + (k.cls ? ' · ' + esc(k.cls) : '') + '</div>' +
+          (k.notes ? '<div class="note">' + t('pz_notes') + '：' + esc(k.notes) + '</div>' : '') +
+          (!k.current ? '<div class="warn">' + t('pz_not_current', { year: esc(d.year) }) + '</div>' +
+            '<p style="margin:10px 0 0"><button class="btn small" type="button" data-enroll="' + i + '">' + t('pz_enroll', { year: esc(d.year) }) + '</button></p>' : '') +
+          '</div><button class="btn ghost small" type="button" data-kid="' + i + '">' + t('pz_edit') + '</button></div>';
+      });
+      h += '<button class="btn ghost block" type="button" id="addKid">' + t('pz_add_kid') + '</button>';
+
+      // 家庭簽到卡
+      h += '<div class="sec-head"><h2>' + t('pz_card') + '</h2></div><section class="card center">' +
+        '<div class="qrbox"><div id="qr" aria-label="QR code"></div><div class="code">' + esc(f.qr) + '</div></div>' +
+        '<p>' + t('pz_card_hint', { last4: '<b>' + esc(f.last4) + '</b>' }) + '</p></section>';
+
+      // 聯絡資料
+      h += '<div class="sec-head"><h2>' + t('pz_contact') + '</h2><button class="btn ghost small" id="editFam" type="button">' + t('pz_edit') + '</button></div>' +
+        '<section class="card"><dl class="info">' +
+        row(t('parent_name'), f.name) + row(t('phone'), W.fmtPhone(f.phone)) + row(t('email'), f.email) +
+        row(t('emergency'), f.emergencyName) + row(t('emergency_phone'), W.fmtPhone(f.emergencyPhone)) +
+        (f.pickup ? row(t('pickup').replace(/（.*）|\(.*\)/, ''), f.pickup) : '') + '</dl></section>';
+
+      // 可以登入的家長
+      h += '<div class="sec-head"><h2>' + t('pz_parents') + '</h2></div><section class="card"><ul class="parents">' +
+        parentLi(f.email, true) + f.others.map(function (e) { return parentLi(e, false); }).join('') + '</ul>' +
+        '<p></p><button class="btn ghost block" id="invite" type="button">' + t('pz_invite') + '</button>' +
+        '<p class="hint">' + t('pz_main_note') + '</p></section>';
+
+      h += '<p></p><button class="btn ghost block" id="logout" type="button">' + t('pz_logout') + '</button>' +
+        '<p class="hint center">' + t('pz_staff_note') + '</p>';
+      return h;
+
+      function row(k, v) { return '<dt>' + esc(k) + '</dt><dd>' + esc(v || '—') + '</dd>'; }
+      function parentLi(e, main) {
+        var tags = [main ? t('pz_main') : '', e === d.me ? t('pz_you') : ''].filter(String).join('・');
+        return '<li><div><div class="em">' + esc(e) + '</div>' + (tags ? '<div class="tag">' + esc(tags) + '</div>' : '') + '</div>' +
+          (!main && e !== d.me ? '<button class="btn ghost small" type="button" data-rm="' + esc(e) + '">' + t('pz_remove') + '</button>' : '') + '</li>';
+      }
+    },
+  };
+
+  var binds = {
+    login: function () {
+      var inp = document.getElementById('em');
+      document.getElementById('lf').onsubmit = function (e) {
+        e.preventDefault();
+        email = inp.value.trim();
+        if (!/^\S+@\S+\.\S+$/.test(email)) { err = t('err_email'); render(); return; }
+        W.store('wcec_last_email', email);
+        busy = true; err = ''; render();
+        W.call('loginStart', { email: email, device: W.deviceLabel() }).then(function (r) {
+          busy = false;
+          if (!r.ok) { err = r.error === 'no_account' ? t('pz_no_account') : W.errText(r.error); render(); return; }
+          wait = { rid: r.rid, num: r.num, masked: r.masked, email: email };
+          go('wait');
+        });
+      };
+    },
+
+    wait: function () {
+      pollTimer = setInterval(poll, 3000);
+      document.getElementById('cf').onsubmit = function (e) {
+        e.preventDefault();
+        var code = document.getElementById('code').value.replace(/\D/g, '');
+        if (code.length !== 6) { err = t('e_bad_code'); render(); return; }
+        busy = true; err = ''; render();
+        W.call('loginCode', { rid: wait.rid, code: code }).then(function (r) {
+          busy = false;
+          if (r.ok) return signedIn(r.token);
+          err = W.errText(r.error);
+          if (r.error === 'expired' || r.error === 'too_many') { wait = null; go('login'); } else render();
+        });
+      };
+      document.getElementById('resend').onclick = function () {
+        if (wait.email) { email = wait.email; }
+        wait = null; err = '';
+        if (email) { go('login'); document.getElementById('lf').requestSubmit(); } else go('login');
+      };
+      document.getElementById('other').onclick = function () { wait = null; err = ''; email = ''; go('login'); };
+    },
+
+    home: function () {
+      W.loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js').then(function () {
+        var el = document.getElementById('qr');
+        if (el && !el.hasChildNodes()) new QRCode(el, { text: data.family.qr, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+      }).catch(function () {});
+      app.querySelectorAll('[data-kid]').forEach(function (b) { b.onclick = function () { kidDialog(data.kids[+b.getAttribute('data-kid')]); }; });
+      app.querySelectorAll('[data-enroll]').forEach(function (b) { b.onclick = function () { kidDialog(data.kids[+b.getAttribute('data-enroll')], true); }; });
+      app.querySelectorAll('[data-rm]').forEach(function (b) { b.onclick = function () { removeDialog(b.getAttribute('data-rm')); }; });
+      document.getElementById('addKid').onclick = function () { kidDialog(null); };
+      document.getElementById('editFam').onclick = familyDialog;
+      document.getElementById('invite').onclick = inviteDialog;
+      document.getElementById('logout').onclick = function () {
+        W.dialog({ title: t('pz_logout'), body: '<p>' + t('pz_logout_q') + '</p>', actions: [
+          { label: t('pz_logout_yes'), onClick: function () { W.call('logout', { token: W.getToken() }); W.setToken(''); data = null; go('login'); } },
+          { label: t('cancel'), kind: 'ghost' },
+        ] });
+      };
+    },
+  };
+
+  // ─── 登入 ───
+  function poll() {
+    if (view !== 'wait' || !wait) return;
+    W.call('loginPoll', { rid: wait.rid }).then(function (r) {
+      if (view !== 'wait') return;
+      if (r.ok && r.token) signedIn(r.token);
+      else if (!r.ok && r.error === 'expired') { wait = null; err = t('e_expired'); go('login'); }
+    });
+  }
+  // 家長從信箱 App 切回來時，馬上檢查一次
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
+
+  function signedIn(token) {
+    W.setToken(token); wait = null; err = '';
+    loadMe();
+  }
+
+  function loadMe() {
+    if (!W.getToken()) { go(wait ? 'wait' : 'login'); return; }
+    view = 'loading'; render();
+    W.call('me', { token: W.getToken() }).then(function (r) {
+      if (r.ok) { data = r.data; go('home'); return; }
+      if (r.error === 'auth') { W.setToken(''); err = t('e_auth'); go('login'); return; }
+      err = W.errText(r.error); go('login');
+    });
+  }
+
+  // ─── 對話框：修改資料 ───
+  function gradeLabel(g) { return g ? (/^\d+$/.test(g) ? (W.lang() === 'en' ? 'Grade ' + g : g + ' 年級') : g) : ''; }
+
+  function inputField(id, label, val, opts) {
+    opts = opts || {};
+    return '<label class="f" for="' + id + '">' + esc(label) + (opts.req ? '<span class="req">' + t('required') + '</span>' : '') + '</label>' +
+      (opts.textarea ? '<textarea id="' + id + '">' + esc(val) + '</textarea>'
+        : '<input id="' + id + '" type="' + (opts.type || 'text') + '"' + (opts.type === 'tel' ? ' inputmode="tel"' : '') + ' value="' + esc(val) + '">') +
+      (opts.hint ? '<p class="hint">' + esc(opts.hint) + '</p>' : '');
+  }
+  function val(el, id) { return el.querySelector('#' + id).value.trim(); }
+  function showErr(el, msg) {
+    var b = el.querySelector('.dlg-err');
+    if (!b) { b = document.createElement('div'); b.className = 'banner err dlg-err'; b.setAttribute('role', 'alert'); el.querySelector('.dlg-body').prepend(b); }
+    b.textContent = msg; b.scrollIntoView({ block: 'nearest' });
+  }
+
+  // 送出修改：成功就關掉對話框並更新畫面
+  function save(action, payload, close, el, okMsg) {
+    var btn = el.querySelector('.dlg-actions .btn');
+    btn.disabled = true; btn.textContent = t('pz_saving');
+    W.call(action, Object.assign({ token: W.getToken() }, payload)).then(function (r) {
+      if (r.ok) { data = r.data; close(); render(); W.toast(okMsg || t('pz_saved')); return; }
+      btn.disabled = false; btn.textContent = t('pz_save');
+      if (r.error === 'auth') { close(); W.setToken(''); err = t('e_auth'); go('login'); return; }
+      showErr(el, r.error === 'invalid' ? t('err_fix') : W.errText(r.error));
+    });
+  }
+
+  function kidDialog(k, enroll) {
+    var g = (k && k.grade) || '';
+    var opts = '<option value="">' + t('grade_pick') + '</option>' + data.grades.map(function (x) {
+      return '<option value="' + esc(x.grade) + '"' + (x.grade === g ? ' selected' : '') + '>' + esc(gradeLabel(x.grade)) + ' · ' + esc(x.cls) + '</option>';
+    }).join('');
+    W.dialog({
+      title: enroll ? t('pz_enroll', { year: data.year }) : k ? t('pz_kid_edit') : t('pz_kid_new'),
+      body: inputField('k_name', t('kid_name'), k ? k.name : '', { req: 1 }) +
+        inputField('k_en', t('kid_en'), k ? k.enName : '') +
+        '<label class="f" for="k_grade">' + t('grade') + '<span class="req">' + t('required') + '</span></label><select id="k_grade">' + opts + '</select>' +
+        inputField('k_notes', t('notes'), k ? k.notes : '', { textarea: 1, hint: t('notes_hint') }),
+      actions: [
+        { label: enroll ? t('pz_enroll', { year: data.year }) : t('pz_save'), onClick: function (close, el) {
+          var kid = { cid: k ? k.cid : '', name: val(el, 'k_name'), enName: val(el, 'k_en'), grade: val(el, 'k_grade'), notes: val(el, 'k_notes'), enroll: !!enroll };
+          if (!kid.name || !kid.grade) { showErr(el, t('err_fix')); return true; }
+          save('saveKid', { kid: kid }, close, el);
+          return true;
+        } },
+        { label: t('cancel'), kind: 'ghost' },
+      ],
+    });
+  }
+
+  function familyDialog() {
+    var f = data.family;
+    W.dialog({
+      title: t('pz_family_edit'),
+      body: inputField('f_name', t('parent_name'), f.name, { req: 1 }) +
+        inputField('f_phone', t('phone'), W.fmtPhone(f.phone), { req: 1, type: 'tel', hint: t('phone_hint') }) +
+        inputField('f_en', t('emergency_name'), f.emergencyName, { req: 1 }) +
+        inputField('f_ep', t('emergency_phone'), W.fmtPhone(f.emergencyPhone), { req: 1, type: 'tel' }) +
+        inputField('f_pick', t('pickup'), f.pickup, { textarea: 1, hint: t('pickup_hint') }),
+      actions: [
+        { label: t('pz_save'), onClick: function (close, el) {
+          var v = { name: val(el, 'f_name'), phone: val(el, 'f_phone'), emergencyName: val(el, 'f_en'), emergencyPhone: val(el, 'f_ep'), pickup: val(el, 'f_pick') };
+          if (!v.name || !v.emergencyName || v.phone.replace(/\D/g, '').length < 10 || v.emergencyPhone.replace(/\D/g, '').length < 10) { showErr(el, t('err_fix')); return true; }
+          save('saveFamily', { family: v }, close, el);
+          return true;
+        } },
+        { label: t('cancel'), kind: 'ghost' },
+      ],
+    });
+  }
+
+  function inviteDialog() {
+    W.dialog({
+      title: t('pz_invite').replace(/^[＋+]\s*/, ''),
+      body: '<p>' + t('pz_invite_hint') + '</p>' + inputField('i_email', t('email'), '', { type: 'email' }),
+      actions: [
+        { label: t('pz_invite_send'), onClick: function (close, el) {
+          var e = val(el, 'i_email');
+          if (!/^\S+@\S+\.\S+$/.test(e)) { showErr(el, t('err_email')); return true; }
+          save('invite', { email: e }, close, el, t('pz_invited', { email: e }));
+          return true;
+        } },
+        { label: t('cancel'), kind: 'ghost' },
+      ],
+    });
+  }
+
+  function removeDialog(e) {
+    W.dialog({
+      title: t('pz_remove'),
+      body: '<p>' + t('pz_remove_q', { email: '<b>' + esc(e) + '</b>' }) + '</p>',
+      actions: [
+        { label: t('pz_remove'), onClick: function (close, el) { save('removeParent', { email: e }, close, el); return true; } },
+        { label: t('cancel'), kind: 'ghost' },
+      ],
+    });
+  }
+
+  // ─── 開始 ───
+  if (wait) go('wait');
+  else loadMe();
+})();
+</script>
+</body>
+</html>
