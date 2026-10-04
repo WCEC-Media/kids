@@ -4,7 +4,7 @@
  * 資料存在這台電腦瀏覽器的 localStorage，正式上線後用不到這個資料夾。
  */
 (function () {
-  var KEY = 'wcec_demo_gas_v2';
+  var KEY = 'wcec_demo_gas_v3';
   var here = document.currentScript ? document.currentScript.src : location.href;
   var CODE_URL = new URL('Code.gs', here).href;
   var WEB_BASE = new URL('../', here).href;
@@ -141,14 +141,23 @@
       if (r[0] === '網站網址') r[1] = WEB_BASE;
     });
     var now = new Date();
-    var F = state.sheets['家庭'], K = state.sheets['孩子'];
-    F.push(['F1', now, '陳大明', '3025551234', '1234', 'chen.daming@gmail.com', '', '陳奶奶', '3025550001', '', 'WCECF-DEMO1', '']);
-    F.push(['F2', now, '林美華', '6105559876', '9876', 'meihua.lin@yahoo.com', '', '林爺爺', '6105550002', '', 'WCECF-DEMO2', '']);
-    F.push(['F3', now, 'David Lee', '4845551234', '1234', 'davidlee@outlook.com', '', 'Grace Lee', '4845550003', '', 'WCECF-DEMO3', '']);
-    K.push(['C1', 'F1', '2026-27', '陳小安', 'Annie', '1', 'Sparks', '', now, '有效', '']);
-    K.push(['C2', 'F1', '2026-27', '陳小樂', 'Leo', '4', 'T&T', '花生過敏', now, '有效', '']);
-    K.push(['C3', 'F2', '2026-27', '林以恩', 'Grace', '3歲', 'Cubbies', '', now, '有效', '']);
-    K.push(['C4', 'F3', '2025-26', 'Ethan Lee', '', '7', 'Trek', '', now, '有效', '']);
+    var F = state.sheets['家庭'], K = state.sheets['孩子'], E = state.sheets['報名'];
+    // 陳家：去年兩個孩子都有報，今年還沒續報（試續報、只報一個）
+    F.push(['F1', now, 'Daniel', 'Chen', '3025551234', '1234', 'daniel.chen@gmail.com', '', 'Mary Chen', '3025550001', '', 'WCECF-DEMO1', '']);
+    K.push(['C1', 'F1', 'Annie', 'Chen', '', now, '有效', '', '']);
+    K.push(['C2', 'F1', 'Leo', 'Chen', 'Peanut allergy', now, '有效', '', '']);
+    E.push(['2025-26', 'C1', 'F1', 'Annie Chen', 'K', 'Sparks', now, '有效', '']);
+    E.push(['2025-26', 'C2', 'F1', 'Leo Chen', '3', 'T&T', now, '有效', '']);
+    // 林家：今年已報名（試簽到：末四碼 9876）
+    F.push(['F2', now, 'Grace', 'Lin', '6105559876', '9876', 'grace.lin@yahoo.com', '', 'Tom Lin', '6105550002', '', 'WCECF-DEMO2', '']);
+    K.push(['C3', 'F2', 'Ella', 'Lin', '', now, '有效', '', '']);
+    E.push(['2026-27', 'C3', 'F2', 'Ella Lin', '3歲', 'Cubbies', now, '有效', '']);
+    // 李家：去年 5 年級的 Ethan 今年 6 年級；去年 6 年級的 Olivia 已經畢業
+    F.push(['F3', now, 'David', 'Lee', '4845551234', '1234', 'davidlee@outlook.com', '', 'Susan Lee', '4845550003', '', 'WCECF-DEMO3', '']);
+    K.push(['C4', 'F3', 'Ethan', 'Lee', '', now, '有效', '', '']);
+    K.push(['C5', 'F3', 'Olivia', 'Lee', '', now, '有效', '', '']);
+    E.push(['2025-26', 'C4', 'F3', 'Ethan Lee', '5', 'T&T', now, '有效', '']);
+    E.push(['2025-26', 'C5', 'F3', 'Olivia Lee', '6', 'T&T', now, '有效', '']);
     save();
   }
 

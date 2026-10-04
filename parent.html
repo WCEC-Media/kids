@@ -78,18 +78,28 @@
       var d = data, f = d.family;
       var h = '<h2 style="margin-top:8px">' + t('pz_hello') + '</h2>';
 
+      // 開放報名時：還沒報今年的孩子，一鍵續報
+      var canEnroll = d.open && d.kids.some(function (k) { return k.eligible; });
+      if (canEnroll) {
+        h += '<section class="card enroll-cta"><h2>' + t('en_title', { year: esc(d.year) }) + '</h2><p>' + t('en_body') + '</p>' +
+          '<button class="btn block" type="button" id="enrollBtn">' + t('en_btn', { year: esc(d.year) }) + '</button></section>';
+      }
+
       // 孩子
       h += '<div class="sec-head"><h2>' + t('pz_kids') + '</h2></div>';
       if (!d.kids.length) h += '<p>' + t('pz_no_kids') + '</p>';
       d.kids.forEach(function (k, i) {
-        h += '<div class="pkid"><div><div class="nm">' + esc(k.name) + (k.enName ? '<small>' + esc(k.enName) + '</small>' : '') + '</div>' +
-          '<div class="meta">' + esc(gradeLabel(k.grade)) + (k.cls ? ' · ' + esc(k.cls) : '') + '</div>' +
+        var status = k.enrolled
+          ? '<div class="st ok">✓ ' + t('st_enrolled', { year: esc(d.year) }) + '</div><div class="meta">' + esc(W.gradeLabel(k.grade)) + (k.cls ? ' · ' + esc(k.cls) : '') + '</div>'
+          : k.graduated ? '<div class="st">' + t('st_grad') + '</div>'
+          : '<div class="st no">' + t('st_not', { year: esc(d.year) }) + '</div>' +
+            (k.lastGrade ? '<div class="meta">' + t('en_last', { grade: esc(W.gradeLabel(k.lastGrade)) + '（' + esc(k.lastYear) + '）' }) + '</div>' : '');
+        h += '<div class="pkid' + (k.enrolled ? '' : ' off') + '"><div><div class="nm">' + esc(k.name) + '</div>' + status +
           (k.notes ? '<div class="note">' + t('pz_notes') + '：' + esc(k.notes) + '</div>' : '') +
-          (!k.current ? '<div class="warn">' + t('pz_not_current', { year: esc(d.year) }) + '</div>' +
-            '<p style="margin:10px 0 0"><button class="btn small" type="button" data-enroll="' + i + '">' + t('pz_enroll', { year: esc(d.year) }) + '</button></p>' : '') +
           '</div><button class="btn ghost small" type="button" data-kid="' + i + '">' + t('pz_edit') + '</button></div>';
       });
-      h += '<button class="btn ghost block" type="button" id="addKid">' + t('pz_add_kid') + '</button>';
+      if (d.open) h += '<button class="btn ghost block" type="button" id="addKid">' + t('pz_add_kid') + '</button>';
+      else h += '<p class="hint">' + t('closed_short', { year: esc(d.year) }) + '</p>';
 
       // 家庭簽到卡
       h += '<div class="sec-head"><h2>' + t('pz_card') + '</h2></div><section class="card center">' +
@@ -168,10 +178,12 @@
         if (el && !el.hasChildNodes()) new QRCode(el, { text: data.family.qr, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
       }).catch(function () {});
       app.querySelectorAll('[data-kid]').forEach(function (b) { b.onclick = function () { kidDialog(data.kids[+b.getAttribute('data-kid')]); }; });
-      app.querySelectorAll('[data-enroll]').forEach(function (b) { b.onclick = function () { kidDialog(data.kids[+b.getAttribute('data-enroll')], true); }; });
+      var eb = document.getElementById('enrollBtn');
+      if (eb) eb.onclick = enrollDialog;
       app.querySelectorAll('[data-rm]').forEach(function (b) { b.onclick = function () { removeDialog(b.getAttribute('data-rm')); }; });
-      document.getElementById('addKid').onclick = function () { kidDialog(null); };
-      document.getElementById('editFam').onclick = familyDialog;
+      var ak = document.getElementById('addKid');
+      if (ak) ak.onclick = function () { kidDialog(null); };
+      document.getElementById('editFam').onclick = function () { familyDialog(); };
       document.getElementById('invite').onclick = inviteDialog;
       document.getElementById('logout').onclick = function () {
         W.dialog({ title: t('pz_logout'), body: '<p>' + t('pz_logout_q') + '</p>', actions: [
@@ -210,7 +222,7 @@
   }
 
   // ─── 對話框：修改資料 ───
-  function gradeLabel(g) { return g ? (/^\d+$/.test(g) ? (W.lang() === 'en' ? 'Grade ' + g : g + ' 年級') : g) : ''; }
+  function gradeLabel(g) { return W.gradeLabel(g); }
 
   function inputField(id, label, val, opts) {
     opts = opts || {};
@@ -227,57 +239,120 @@
   }
 
   // 送出修改：成功就關掉對話框並更新畫面
-  function save(action, payload, close, el, okMsg) {
+  function save(action, payload, close, el, okMsg, after) {
     var btn = el.querySelector('.dlg-actions .btn');
     btn.disabled = true; btn.textContent = t('pz_saving');
     W.call(action, Object.assign({ token: W.getToken() }, payload)).then(function (r) {
-      if (r.ok) { data = r.data; close(); render(); W.toast(okMsg || t('pz_saved')); return; }
+      if (r.ok) { data = r.data; close(); render(); W.toast(okMsg || t('pz_saved')); if (typeof after === 'function') after(); return; }
       btn.disabled = false; btn.textContent = t('pz_save');
       if (r.error === 'auth') { close(); W.setToken(''); err = t('e_auth'); go('login'); return; }
       showErr(el, r.error === 'invalid' ? t('err_fix') : W.errText(r.error));
     });
   }
 
-  function kidDialog(k, enroll) {
-    var g = (k && k.grade) || '';
-    var opts = '<option value="">' + t('grade_pick') + '</option>' + data.grades.map(function (x) {
-      return '<option value="' + esc(x.grade) + '"' + (x.grade === g ? ' selected' : '') + '>' + esc(gradeLabel(x.grade)) + ' · ' + esc(x.cls) + '</option>';
-    }).join('');
-    W.dialog({
-      title: enroll ? t('pz_enroll', { year: data.year }) : k ? t('pz_kid_edit') : t('pz_kid_new'),
-      body: inputField('k_name', t('kid_name'), k ? k.name : '', { req: 1 }) +
-        inputField('k_en', t('kid_en'), k ? k.enName : '') +
-        '<label class="f" for="k_grade">' + t('grade') + '<span class="req">' + t('required') + '</span></label><select id="k_grade">' + opts + '</select>' +
-        inputField('k_notes', t('notes'), k ? k.notes : '', { textarea: 1, hint: t('notes_hint') }),
+  function gradeSelect(id, sel) {
+    return '<select id="' + id + '"><option value="">' + t('grade_pick') + '</option>' + data.grades.map(function (x) {
+      return '<option value="' + esc(x.grade) + '"' + (x.grade === sel ? ' selected' : '') + '>' + esc(gradeLabel(x.grade)) + ' · ' + esc(x.cls) + '</option>';
+    }).join('') + '</select>';
+  }
+
+  // 續報：勾選今年要參加的孩子，年級先帶「去年的下一級」
+  function enrollDialog() {
+    var f = data.family;
+    var list = data.kids.filter(function (k) { return k.eligible || k.graduated; });
+    var body = '<p>' + t('en_pick') + '</p>' + list.map(function (k) {
+      if (k.graduated) return '<div class="ekid off"><div class="nm">' + esc(k.name) + '</div><div class="meta">' + t('en_grad') + '</div></div>';
+      return '<div class="ekid"><label class="check"><input type="checkbox" data-cid="' + esc(k.cid) + '" checked><span class="nm">' + esc(k.name) + '</span></label>' +
+        (k.lastGrade ? '<div class="meta">' + t('en_last', { grade: esc(gradeLabel(k.lastGrade)) }) + '</div>' : '') +
+        '<label class="f" for="g_' + esc(k.cid) + '">' + t('grade_this') + '</label>' + gradeSelect('g_' + k.cid, k.suggested) + '</div>';
+    }).join('') +
+      '<p class="hint">' + t('en_new_kid') + '</p>' +
+      '<h3 style="margin:22px 0 8px">' + t('en_contact_q') + '</h3><dl class="info">' +
+      '<dt>' + t('parent_name') + '</dt><dd>' + esc(f.name) + '</dd><dt>' + t('phone') + '</dt><dd>' + esc(W.fmtPhone(f.phone)) + '</dd>' +
+      '<dt>' + t('emergency') + '</dt><dd>' + esc(f.emergencyName) + '・' + esc(W.fmtPhone(f.emergencyPhone)) + '</dd></dl>' +
+      '<p><button type="button" class="btn ghost small" id="enEditFam">' + t('en_contact_edit') + '</button></p>';
+    var d = W.dialog({
+      title: t('en_dialog', { year: data.year }),
+      body: body,
       actions: [
-        { label: enroll ? t('pz_enroll', { year: data.year }) : t('pz_save'), onClick: function (close, el) {
-          var kid = { cid: k ? k.cid : '', name: val(el, 'k_name'), enName: val(el, 'k_en'), grade: val(el, 'k_grade'), notes: val(el, 'k_notes'), enroll: !!enroll };
-          if (!kid.name || !kid.grade) { showErr(el, t('err_fix')); return true; }
+        { label: t('en_submit'), onClick: function (close, el) {
+          var picks = [], missing = false;
+          el.querySelectorAll('[data-cid]').forEach(function (cb) {
+            if (!cb.checked) return;
+            var g = el.querySelector('#g_' + cb.getAttribute('data-cid')).value;
+            if (!g) missing = true;
+            picks.push({ cid: cb.getAttribute('data-cid'), grade: g });
+          });
+          if (!picks.length) { showErr(el, t('en_none')); return true; }
+          if (missing) { showErr(el, t('err_fix')); return true; }
+          var btn = el.querySelector('.dlg-actions .btn');
+          btn.disabled = true; btn.textContent = t('pz_saving');
+          W.call('enroll', { token: W.getToken(), kids: picks }).then(function (r) {
+            if (r.ok) {
+              data = r.data; close(); render();
+              W.toast(t('en_done', { names: r.added.map(function (x) { return x.name; }).join(', ') }));
+              return;
+            }
+            btn.disabled = false; btn.textContent = t('en_submit');
+            if (r.error === 'auth') { close(); W.setToken(''); err = t('e_auth'); go('login'); return; }
+            showErr(el, W.errText(r.error));
+          });
+          return true;
+        } },
+        { label: t('cancel'), kind: 'ghost' },
+      ],
+    });
+    d.el.querySelector('#enEditFam').onclick = function () { d.close(); familyDialog(enrollDialog); };
+  }
+
+  function kidDialog(k) {
+    var showGrade = !k || k.enrolled;
+    var body = '<div class="row">' + inputField('k_first', t('first'), k ? k.first : '', { req: 1 }) +
+      inputField('k_last', t('last'), k ? k.last : (data.family.last || ''), { req: 1 }) + '</div>' +
+      (showGrade ? '<label class="f" for="k_grade">' + t('grade_this') + '<span class="req">' + t('required') + '</span></label>' + gradeSelect('k_grade', k ? k.grade : '') : '') +
+      inputField('k_notes', t('notes'), k ? k.notes : '', { textarea: 1, hint: t('notes_hint') }) +
+      (k && k.enrolled ? '<p style="margin-top:20px"><button type="button" class="btn linkbtn" id="wd">' + t('wd_link') + '</button></p>' : '');
+    var d = W.dialog({
+      title: k ? t('pz_kid_edit') : t('pz_kid_new'),
+      body: body,
+      actions: [
+        { label: k ? t('pz_save') : t('en_submit'), onClick: function (close, el) {
+          var kid = { cid: k ? k.cid : '', first: val(el, 'k_first'), last: val(el, 'k_last'),
+                      grade: showGrade ? val(el, 'k_grade') : '', notes: val(el, 'k_notes') };
+          if (!kid.first || !kid.last || (showGrade && !kid.grade)) { showErr(el, t('err_fix')); return true; }
           save('saveKid', { kid: kid }, close, el);
           return true;
         } },
         { label: t('cancel'), kind: 'ghost' },
       ],
     });
+    var wd = d.el.querySelector('#wd');
+    if (wd) wd.onclick = function () {
+      d.close();
+      W.dialog({ title: t('wd_link'), body: '<p>' + t('wd_q', { name: '<b>' + esc(k.name) + '</b>' }) + '</p>', actions: [
+        { label: t('wd_yes'), onClick: function (close, el) { save('withdraw', { cid: k.cid }, close, el, t('wd_done', { name: k.name })); return true; } },
+        { label: t('cancel'), kind: 'ghost' },
+      ] });
+    };
   }
 
-  function familyDialog() {
+  function familyDialog(after) {
     var f = data.family;
     W.dialog({
       title: t('pz_family_edit'),
-      body: inputField('f_name', t('parent_name'), f.name, { req: 1 }) +
+      body: '<div class="row">' + inputField('f_first', t('first'), f.first, { req: 1 }) + inputField('f_last', t('last'), f.last, { req: 1 }) + '</div>' +
         inputField('f_phone', t('phone'), W.fmtPhone(f.phone), { req: 1, type: 'tel', hint: t('phone_hint') }) +
         inputField('f_en', t('emergency_name'), f.emergencyName, { req: 1 }) +
         inputField('f_ep', t('emergency_phone'), W.fmtPhone(f.emergencyPhone), { req: 1, type: 'tel' }) +
         inputField('f_pick', t('pickup'), f.pickup, { textarea: 1, hint: t('pickup_hint') }),
       actions: [
         { label: t('pz_save'), onClick: function (close, el) {
-          var v = { name: val(el, 'f_name'), phone: val(el, 'f_phone'), emergencyName: val(el, 'f_en'), emergencyPhone: val(el, 'f_ep'), pickup: val(el, 'f_pick') };
-          if (!v.name || !v.emergencyName || v.phone.replace(/\D/g, '').length < 10 || v.emergencyPhone.replace(/\D/g, '').length < 10) { showErr(el, t('err_fix')); return true; }
-          save('saveFamily', { family: v }, close, el);
+          var v = { first: val(el, 'f_first'), last: val(el, 'f_last'), phone: val(el, 'f_phone'), emergencyName: val(el, 'f_en'), emergencyPhone: val(el, 'f_ep'), pickup: val(el, 'f_pick') };
+          if (!v.first || !v.last || !v.emergencyName || v.phone.replace(/\D/g, '').length < 10 || v.emergencyPhone.replace(/\D/g, '').length < 10) { showErr(el, t('err_fix')); return true; }
+          save('saveFamily', { family: v }, close, el, null, after);
           return true;
         } },
-        { label: t('cancel'), kind: 'ghost' },
+        { label: t('cancel'), kind: 'ghost', onClick: function () { if (typeof after === 'function') setTimeout(after, 0); } },
       ],
     });
   }

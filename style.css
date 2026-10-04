@@ -136,3 +136,16 @@ input.code { text-align: center; font-size: 30px; letter-spacing: .3em; font-fam
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 14px 22px; border-radius: 14px; font-weight: 700; z-index: 60; max-width: calc(100% - 32px); }
 .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); margin: 24px 0 8px; }
 .divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+
+/* 續報 */
+.enroll-cta { border: 2px solid var(--gold); background: var(--gold-soft); }
+.enroll-cta h2 { margin-bottom: 6px; }
+.pkid.off { border-left-color: var(--line); }
+.pkid .st { font-weight: 800; margin-top: 4px; }
+.pkid .st.ok { color: var(--ok); }
+.pkid .st.no { color: var(--muted); }
+.ekid { border: 2px solid var(--line); border-radius: 14px; padding: 12px 16px 16px; margin: 12px 0; }
+.ekid.off { opacity: .7; }
+.ekid .nm { font-size: 23px; font-weight: 800; }
+.ekid .meta { color: var(--muted); margin-top: 2px; }
+.ekid label.f { margin-top: 10px; }

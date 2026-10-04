@@ -16,28 +16,30 @@
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
   var app = document.getElementById('app');
-  var cfg = null, result = null, sending = false, tried = false, topError = '';
+  var cfg = null, result = null, sending = false, tried = false, topError = '', newAnyway = false;
   var parent, kids, consent, honeypot;
   resetForm();
 
   function resetForm() {
-    parent = { name: '', phone: '', email: '', emergencyName: '', emergencyPhone: '', pickup: '' };
+    parent = { first: '', last: '', phone: '', email: '', emergencyName: '', emergencyPhone: '', pickup: '' };
     kids = [newKid()]; consent = false; honeypot = ''; tried = false; topError = '';
   }
-  function newKid() { return { name: '', enName: '', grade: '', notes: '' }; }
+  function newKid() { return { first: '', last: '', grade: '', notes: '' }; }
   function digits(v) { return String(v || '').replace(/\D/g, ''); }
   function clsOf(g) { var m = (cfg.grades || []).filter(function (x) { return x.grade === g; })[0]; return m ? m.cls : ''; }
 
   // ─── 驗證 ───
   function errors() {
     var e = {};
-    if (!parent.name.trim()) e['p.name'] = t('err_required');
+    if (!parent.first.trim()) e['p.first'] = t('err_required');
+    if (!parent.last.trim()) e['p.last'] = t('err_required');
     if (digits(parent.phone).length < 10) e['p.phone'] = t('err_phone');
     if (!/^\S+@\S+\.\S+$/.test(parent.email.trim())) e['p.email'] = t('err_email');
     if (!parent.emergencyName.trim()) e['p.emergencyName'] = t('err_required');
     if (digits(parent.emergencyPhone).length < 10) e['p.emergencyPhone'] = t('err_phone');
     kids.forEach(function (k, i) {
-      if (!k.name.trim()) e['k' + i + '.name'] = t('err_required');
+      if (!k.first.trim()) e['k' + i + '.first'] = t('err_required');
+      if (!k.last.trim()) e['k' + i + '.last'] = t('err_required');
       if (!k.grade) e['k' + i + '.grade'] = t('err_required');
     });
     if (!consent) e.consent = t('err_consent');
@@ -71,17 +73,26 @@
 
     var gradeOpts = function (sel) {
       return '<option value="">' + t('grade_pick') + '</option>' + cfg.grades.map(function (g) {
-        return '<option value="' + esc(g.grade) + '"' + (g.grade === sel ? ' selected' : '') + '>' + esc(g.grade) + '</option>';
+        return '<option value="' + esc(g.grade) + '"' + (g.grade === sel ? ' selected' : '') + '>' + esc(W.gradeLabel(g.grade)) + '</option>';
       }).join('');
     };
 
     var html = header();
+    if (W.getToken() && !newAnyway) {
+      app.innerHTML = html + '<section class="card"><p>' + t('reg_logged_in') + '</p>' +
+        '<a class="btn block" href="' + W.link('parent.html') + '">' + t('go_parent') + '</a><p></p>' +
+        '<button class="btn linkbtn block" id="anyway" type="button">' + t('reg_new_anyway') + '</button></section>';
+      bindTop();
+      document.getElementById('anyway').onclick = function () { newAnyway = true; render(); };
+      return;
+    }
     if (topError) html += '<div class="banner err" role="alert">' + esc(topError) + '</div>';
     html += '<div class="card row" style="align-items:center"><span>' + t('have_account') + '</span>' +
       '<a class="btn ghost small" style="flex:0 0 auto" href="' + W.link('parent.html') + '">' + t('go_parent') + '</a></div>';
 
     html += '<form id="f" novalidate><section class="card"><h2>' + t('parent') + '</h2>' +
-      field('p.name', t('parent_name'), parent.name, { req: 1, auto: 'name' }) +
+      '<p class="hint">' + t('name_hint') + '</p><div class="row">' + field('p.first', t('first'), parent.first, { req: 1, auto: 'given-name' }) +
+      field('p.last', t('last'), parent.last, { req: 1, auto: 'family-name' }) + '</div>' +
       field('p.phone', t('phone'), parent.phone, { req: 1, type: 'tel', auto: 'tel', hint: t('phone_hint') }) +
       field('p.email', t('email'), parent.email, { req: 1, type: 'email', auto: 'email', hint: t('email_hint') }) +
       '</section><section class="card"><h2>' + t('emergency') + '</h2>' +
@@ -94,8 +105,8 @@
       var gErr = tried && errors()['k' + i + '.grade'];
       html += '<div class="kid"><div class="kid-head"><h3>' + t('kid_n', { n: i + 1 }) + '</h3>' +
         (kids.length > 1 ? '<button type="button" class="btn ghost small" data-remove="' + i + '">' + t('remove') + '</button>' : '') + '</div>' +
-        field('k' + i + '.name', t('kid_name'), k.name, { req: 1 }) +
-        field('k' + i + '.enName', t('kid_en'), k.enName) +
+        '<div class="row">' + field('k' + i + '.first', t('first'), k.first, { req: 1 }) +
+        field('k' + i + '.last', t('last'), k.last, { req: 1 }) + '</div>' +
         '<div class="' + (gErr ? 'bad' : '') + '"><label class="f" for="k' + i + '.grade">' + t('grade') + '<span class="req">' + t('required') + '</span></label>' +
         '<select id="k' + i + '.grade" data-bind="k' + i + '.grade">' + gradeOpts(k.grade) + '</select>' +
         (k.grade && clsOf(k.grade) ? '<span class="cls-tag">' + t('cls') + '：' + esc(clsOf(k.grade)) + '</span>' : '') +
@@ -126,7 +137,7 @@
       b.onclick = function () { kids.splice(+b.getAttribute('data-remove'), 1); render(); };
     });
     var add = document.getElementById('add');
-    if (add) add.onclick = function () { kids.push(newKid()); render(); var el = document.getElementById('k' + (kids.length - 1) + '.name'); if (el) el.focus(); };
+    if (add) add.onclick = function () { kids.push(newKid()); render(); var el = document.getElementById('k' + (kids.length - 1) + '.first'); if (el) el.focus(); };
     document.getElementById('consent').onchange = function (e) { consent = e.target.checked; if (tried) render(); };
     document.getElementById('website').oninput = function (e) { honeypot = e.target.value; };
     document.getElementById('f').onsubmit = submit;
@@ -156,8 +167,8 @@
       return;
     }
     sending = 'checking'; render();
-    W.call('precheck', { parent: { name: parent.name, email: parent.email, phone: parent.phone },
-                         kids: kids.map(function (k) { return k.name; }) }).then(function (r) {
+    W.call('precheck', { parent: { first: parent.first, last: parent.last, email: parent.email, phone: parent.phone },
+                         kids: kids.map(function (k) { return { first: k.first, last: k.last }; }) }).then(function (r) {
       sending = false; render();
       if (!r.ok) { topError = W.errText(r.error); render(); return; }
       if (r.match === 'strong') return askStrong(r);

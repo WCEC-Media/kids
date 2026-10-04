@@ -8,12 +8,12 @@
       // 報名表
       reg_title: 'Awana 報名', reg_sub: '威明頓主恩堂 兒童事工',
       closed: '目前沒有開放報名，請留意教會公告。',
-      parent: '家長資料', parent_name: '家長姓名', phone: '手機號碼', email: 'Email',
+      parent: '家長資料', parent_name: '家長姓名', first: 'First Name（名）', last: 'Last Name（姓）', name_hint: '請填英文名字', phone: '手機號碼', email: 'Email',
       phone_hint: '簽到時會用手機末四碼找到您的孩子', email_hint: '之後用這個 Email 登入家長專區，不用密碼',
       emergency: '緊急聯絡人', emergency_name: '姓名（家長以外的人）', emergency_phone: '電話',
-      pickup: '其他可以接孩子的人（選填）', pickup_hint: '例如：祖母 王美玲 302-555-0000',
-      kids: '孩子資料', kid_n: '第 {n} 位孩子', kid_name: '孩子姓名', kid_en: '英文名（選填）',
-      grade: '年級（2026 秋季）', grade_pick: '請選擇', cls: '班別',
+      pickup: '其他可以接孩子的人（選填）', pickup_hint: '例如：Grandma Mary Wang 302-555-0000',
+      kids: '孩子資料', kid_n: '第 {n} 位孩子', kid_name: '孩子姓名',
+      grade: '今年的年級', grade_pick: '請選擇', cls: '班別',
       notes: '過敏或特殊照顧需求（選填）', notes_hint: '只有兒童事工同工看得到，簽到畫面不會顯示',
       add_kid: '＋ 再加一位孩子', remove: '移除',
       consent: '我同意教會將以上資料用於 Awana 報名、簽到與緊急聯絡。資料存放在教會的 Google 帳號，不會提供給其他單位。',
@@ -35,6 +35,21 @@
       dup_old_title: '我們先幫您建立新的登記',
       dup_old_body: '送出後，兒童事工同工會幫您把舊資料合併過來。之後就用這次填的 Email 登入。',
       dup_old_go: '好，送出報名',
+
+      // 續報
+      reg_logged_in: '您已經登入家長專區了。以前報過的孩子續報、或幫新的孩子報名，都在家長專區完成，不用再填這份表。',
+      reg_new_anyway: '我要幫另一個家庭填新的報名表',
+      en_title: 'Awana {year} 開放報名了', en_body: '不用重新填表，勾選今年要參加的孩子就好。',
+      en_btn: '幫孩子報名 {year}', en_dialog: '報名 Awana {year}',
+      en_pick: '請勾選今年要參加的孩子，並確認今年的年級：', en_last: '去年：{grade}',
+      en_grad: '已從 Awana 畢業（去年 6 年級）',
+      en_contact_q: '聯絡資料還正確嗎？', en_contact_edit: '修改聯絡資料',
+      en_submit: '送出報名', en_none: '請至少勾選一個孩子', en_done: '已報名：{names}',
+      en_new_kid: '要報名的孩子不在上面？按「＋ 新增孩子」。',
+      st_enrolled: '{year} 已報名', st_not: '{year} 沒有報名', st_grad: '已從 Awana 畢業',
+      wd_link: '這學年不參加了', wd_q: '{name} 這學年不參加 Awana 了嗎？孩子的資料會留著，之後還可以再報名。',
+      wd_yes: '確定，這學年不參加', wd_done: '已取消 {name} 這學年的報名',
+      closed_short: '{year} 目前沒有開放報名。', grade_this: '今年的年級',
       // 報名完成
       ok_title: '報名成功！', ok_enter: '進入家長專區',
       ok_enter_hint: '在家長專區可以看到孩子的資料、家庭簽到卡，之後也可以在那裡修改資料。',
@@ -100,12 +115,12 @@
       demo: 'Demo mode: test data only, nothing goes to the real spreadsheet', demo_tools: 'Open demo inbox & spreadsheet',
       reg_title: 'Awana Registration', reg_sub: 'WCEC Children\'s Ministry',
       closed: 'Registration is not open right now. Please watch for church announcements.',
-      parent: 'Parent', parent_name: 'Parent name', phone: 'Mobile phone', email: 'Email',
+      parent: 'Parent', parent_name: 'Parent name', first: 'First name', last: 'Last name', name_hint: '', phone: 'Mobile phone', email: 'Email',
       phone_hint: 'At check-in, the last 4 digits find your children', email_hint: 'You\'ll sign in to the Parent Area with this email. No password.',
       emergency: 'Emergency contact', emergency_name: 'Name (someone other than parent)', emergency_phone: 'Phone',
       pickup: 'Others allowed to pick up (optional)', pickup_hint: 'e.g. Grandma Mary Wang 302-555-0000',
-      kids: 'Children', kid_n: 'Child {n}', kid_name: 'Child\'s name', kid_en: 'English name (optional)',
-      grade: 'Grade (Fall 2026)', grade_pick: 'Choose', cls: 'Club',
+      kids: 'Children', kid_n: 'Child {n}', kid_name: 'Child\'s name',
+      grade: 'Grade this school year', grade_pick: 'Choose', cls: 'Club',
       notes: 'Allergies or special needs (optional)', notes_hint: 'Seen only by children\'s ministry staff, never on the check-in screen',
       add_kid: '+ Add another child', remove: 'Remove',
       consent: 'I agree that the church may use this information for Awana registration, check-in, and emergency contact. It is stored in the church\'s Google account and not shared with others.',
@@ -126,6 +141,20 @@
       dup_old_title: 'We\'ll create a new registration for now',
       dup_old_body: 'After you submit, our staff will merge your old records. From now on, sign in with the email you entered today.',
       dup_old_go: 'OK, submit',
+
+      reg_logged_in: 'You\'re already signed in to the Parent Area. Re-register returning children or add new ones there. No need to fill out this form.',
+      reg_new_anyway: 'Fill out a new form for a different family',
+      en_title: 'Awana {year} registration is open', en_body: 'No need to fill out the form again. Just check the children attending this year.',
+      en_btn: 'Register for {year}', en_dialog: 'Register for Awana {year}',
+      en_pick: 'Check the children attending this year and confirm their grade:', en_last: 'Last year: {grade}',
+      en_grad: 'Graduated from Awana (6th grade last year)',
+      en_contact_q: 'Is your contact information still correct?', en_contact_edit: 'Edit contact information',
+      en_submit: 'Submit', en_none: 'Please check at least one child', en_done: 'Registered: {names}',
+      en_new_kid: 'Child not listed? Tap "+ Add a child".',
+      st_enrolled: 'Registered for {year}', st_not: 'Not registered for {year}', st_grad: 'Graduated from Awana',
+      wd_link: 'Not attending this year', wd_q: 'Is {name} not attending Awana this year? We\'ll keep their information so you can register again later.',
+      wd_yes: 'Yes, not attending this year', wd_done: '{name} has been removed from this year',
+      closed_short: 'Registration for {year} is not open right now.', grade_this: 'Grade this school year',
       ok_title: 'You\'re registered!', ok_enter: 'Open the Parent Area',
       ok_enter_hint: 'See your children, your family check-in card, and update information anytime.',
       ok_or: 'At check-in, just enter {last4} (last 4 of your phone) on the front-desk iPad.',
@@ -261,6 +290,14 @@
     return p.length === 10 ? p.slice(0, 3) + '-' + p.slice(3, 6) + '-' + p.slice(6) : p;
   }
 
+  // 「1」→「1 年級」/「Grade 1」；「K」、「3歲」等照原樣
+  function gradeLabel(g) {
+    g = String(g || '');
+    if (/^\d+$/.test(g)) return lang === 'en' ? 'Grade ' + g : g + ' 年級';
+    if (lang === 'en') return g.replace('2歲', 'Age 2').replace('3歲', 'Age 3').replace('4歲', 'Age 4');
+    return g;
+  }
+
   function demoBar() {
     return DEMO ? '<div class="demo">' + t('demo') + ' · <a href="demo/index.html" target="_blank" rel="noopener">' + t('demo_tools') + '</a></div>' : '';
   }
@@ -298,6 +335,6 @@
   window.WCEC = {
     t: t, lang: function () { return lang; }, setLang: setLang, call: call, errText: errText, DEMO: DEMO, EMBED: EMBED,
     store: store, forget: forget, esc: esc, loadScript: loadScript, link: link, fmtPhone: fmtPhone,
-    getToken: getToken, setToken: setToken, deviceLabel: deviceLabel, dialog: dialog, demoBar: demoBar, toast: toast,
+    getToken: getToken, setToken: setToken, deviceLabel: deviceLabel, dialog: dialog, demoBar: demoBar, toast: toast, gradeLabel: gradeLabel,
   };
 })();
