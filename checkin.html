@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Awana 簽到 | WCEC</title>
-<link rel="stylesheet" href="style.css?v=20261005a">
+<link rel="stylesheet" href="style.css?v=20261005b">
 <style>
   body { font-size: 22px; }
   .wrap { max-width: 900px; }
@@ -54,7 +54,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261005a"></script>
+<script src="common.js?v=20261005b"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -63,6 +63,18 @@
   var view = key ? 'home' : 'locked';
   var digits = '', families = [], fam = null, picked = {}, done = null, err = '', busy = false, via = 'phone';
   var idleTimer = null, countdown = 0, cdTimer = null, scanner = null;
+  // 名單快取：解鎖後先下載今年的家庭和孩子，輸入末四碼時直接在這台裝置上找，不用等網路
+  var roster = null, rosterAt = 0, showCode = false;
+  function loadRoster() {
+    if (!key) return;
+    W.call('roster', { key: key }).then(function (r) {
+      if (r.ok) { roster = r.families; rosterAt = Date.now(); showCode = !!r.showCode; }
+      else if (r.error === 'bad_key' || r.error === 'not_configured') handleErr(r);
+    });
+  }
+  loadRoster();
+  setInterval(loadRoster, 2 * 60 * 1000);   // 每 2 分鐘更新一次（新報名的孩子、別台簽到的紀錄）
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && Date.now() - rosterAt > 60000) loadRoster(); });
 
   function go(v) { view = v; err = ''; render(); }
   function reset() { digits = ''; families = []; fam = null; picked = {}; done = null; stopScan(); go(key ? 'home' : 'locked'); }
@@ -149,7 +161,8 @@
     done: function () {
       return '<section class="card center"><div style="font-size:64px" aria-hidden="true">✅</div><h2>' + t('ci_done') + '</h2>' +
         '<ul class="kids-done">' + done.kids.map(function (k) { return '<li><b>' + esc(k.name) + '</b>' + (k.cls ? ' · ' + esc(k.cls) : '') + '</li>'; }).join('') + '</ul>' +
-        (done.code ? '<p style="margin:18px 0 0">' + t('ci_code') + '</p><div class="code">' + esc(done.code) + '</div><p class="hint">' + t('ci_code_hint') + '</p>' : '') +
+        (done.code ? '<p style="margin:18px 0 0">' + t('ci_code') + '</p><div class="code">' + esc(done.code) + '</div><p class="hint">' + t('ci_code_hint') + '</p>'
+          : done.pending && showCode ? '<p style="margin:18px 0 0">' + t('ci_code') + '</p><div class="code"><span class="spinner"></span></div>' : '') +
         '<div class="actions"><button class="btn" id="fin">' + t('ci_finish') + '</button></div><p class="hint">' + t('ci_auto', { s: countdown }) + '</p></section>';
     },
   };
@@ -162,7 +175,7 @@
         busy = true; var v = pw.value; render();
         W.call('unlock', { key: v }).then(function (r) {
           busy = false;
-          if (r.ok) { key = v; W.store('wcec_station_key', v); go('home'); }
+          if (r.ok) { key = v; W.store('wcec_station_key', v); loadRoster(); go('home'); }
           else { err = t('ci_' + r.error) || t('e_network'); render(); }
         });
       };
@@ -196,6 +209,15 @@
   }
 
   function lookup(q) {
+    // 名單是 15 分鐘內下載的就直接在本機找（立刻出結果）
+    if (roster && Date.now() - rosterAt < 15 * 60 * 1000) {
+      digits = '';
+      families = roster.filter(function (f) { return q.qr ? f.qr && f.qr === String(q.qr).trim() : f.last4 === q.last4; })
+        .map(function (f) { return { fid: f.fid, label: f.label, kids: f.kids.map(function (k) { return Object.assign({}, k); }) }; });
+      if (!families.length) { view = 'home'; err = t('ci_none'); render(); return; }
+      if (families.length === 1) pickFamily(families[0]); else go('families');
+      return;
+    }
     busy = true;
     W.call('lookup', Object.assign({ key: key }, q)).then(function (r) {
       busy = false; digits = '';
@@ -214,13 +236,21 @@
 
   function checkin() {
     var cids = Object.keys(picked).filter(function (k) { return picked[k]; });
-    busy = true; render();
-    W.call('checkin', { key: key, fid: fam.fid, cids: cids, via: via }).then(function (r) {
-      busy = false;
-      if (!r.ok) return handleErr(r);
-      done = r; countdown = 20; go('done');
-      clearInterval(cdTimer);
-      cdTimer = setInterval(function () { countdown--; if (countdown <= 0) finish(); else if (view === 'done') render(); }, 1000);
+    // 先顯示「簽到完成」，同時在背景寫進試算表；萬一失敗再回到選孩子的畫面請同工重按
+    var f = fam, chosen = f.kids.filter(function (k) { return picked[k.cid]; });
+    done = { kids: chosen.map(function (k) { return { name: k.name, cls: k.cls }; }), code: null, pending: true };
+    countdown = 20; go('done');
+    clearInterval(cdTimer);
+    cdTimer = setInterval(function () { countdown--; if (countdown <= 0) finish(); else if (view === 'done') render(); }, 1000);
+    W.call('checkin', { key: key, fid: f.fid, cids: cids, via: via }).then(function (r) {
+      if (!r.ok) {
+        clearInterval(cdTimer);
+        if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r);
+        fam = f; done = null; view = 'kids'; err = t('ci_failed'); render(); return;
+      }
+      // 名單快取裡標成已簽到
+      (roster || []).forEach(function (rf) { if (rf.fid === f.fid) rf.kids.forEach(function (k) { if (cids.indexOf(k.cid) >= 0) k.checkedIn = true; }); });
+      if (done && done.pending) { done.pending = false; done.code = r.code; if (view === 'done') render(); }
     });
   }
   function finish() { clearInterval(cdTimer); reset(); }

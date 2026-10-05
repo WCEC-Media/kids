@@ -148,7 +148,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261005a"></script>
+<script src="common.js?v=20261005b"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -321,7 +321,7 @@
       document.getElementById('invite').onclick = inviteSheet;
       document.getElementById('logout').onclick = function () {
         alertBox(t('p_signout'), t('pz_logout_q'), t('pz_logout_yes'), function () {
-          W.call('logout', { token: W.getToken() }); W.setToken(''); data = null; go('login');
+          W.call('logout', { token: W.getToken() }); W.forget(cacheKey()); W.setToken(''); data = null; go('login');
         });
       };
     },
@@ -345,12 +345,28 @@
   }
   document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
   function signedIn(token) { W.setToken(token); wait = null; err = ''; loadMe(); }
+  // 上次的資料先顯示（立刻看得到簽到卡），背景再跟試算表要最新的資料
+  // 過敏／特殊需求不存在手機上，最新資料回來才會顯示
+  function cacheKey() { return 'wcec_me_' + W.getToken().slice(-10); }
+  function saveCache(d) {
+    try {
+      var c = JSON.parse(JSON.stringify(d));
+      (c.kids || []).forEach(function (k) { k.notes = ''; });
+      W.store(cacheKey(), JSON.stringify(c));
+    } catch (e) {}
+  }
+  function readCache() { try { return JSON.parse(W.store(cacheKey()) || 'null'); } catch (e) { return null; } }
   function loadMe() {
     if (!W.getToken()) { go(wait ? 'wait' : 'login'); return; }
-    view = 'loading'; render();
+    var cached = readCache();
+    if (cached && cached.family) { data = cached; go('home'); }
+    else { view = 'loading'; render(); }
     W.call('me', { token: W.getToken() }).then(function (r) {
-      if (r.ok) { data = r.data; go('home'); return; }
-      W.setToken(''); err = r.error === 'auth' ? t('e_auth') : W.errText(r.error); go('login');
+      if (r.ok) { data = r.data; saveCache(data); if (view === 'home' || view === 'loading') go('home'); return; }
+      if (r.error === 'auth') { W.forget(cacheKey()); W.setToken(''); err = t('e_auth'); go('login'); return; }
+      // 網路不通：有舊資料就繼續顯示並提示；沒有才回登入頁
+      err = W.errText(r.error);
+      if (cached && cached.family) render(); else go('login');
     });
   }
 
@@ -423,7 +439,7 @@
     busySave(true);
     return W.call(action, Object.assign({ token: W.getToken() }, payload)).then(function (r) {
       busySave(false);
-      if (r.ok) { data = r.data; closeSheet(); render(); if (okMsg !== false) W.toast(okMsg || t('pz_saved')); if (after) after(r); return r; }
+      if (r.ok) { data = r.data; saveCache(data); closeSheet(); render(); if (okMsg !== false) W.toast(okMsg || t('pz_saved')); if (after) after(r); return r; }
       if (r.error === 'auth') { closeSheet(); W.setToken(''); err = t('e_auth'); go('login'); return r; }
       sheetErr(r.error === 'invalid' ? t('err_fix') : W.errText(r.error));
       return r;
