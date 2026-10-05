@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Awana 簽到 | WCEC</title>
-<link rel="stylesheet" href="style.css?v=20261005b">
+<link rel="stylesheet" href="style.css?v=20261005c">
 <style>
   body { font-size: 22px; }
   .wrap { max-width: 900px; }
@@ -34,6 +34,12 @@
   .langbtn { position: fixed; right: 14px; top: 12px; }
   #reader { max-width: 480px; margin: 12px auto; border-radius: 16px; overflow: hidden; }
   .today { color: var(--muted); font-size: 20px; }
+  .nf { background: var(--err-soft); color: var(--err); border-radius: 16px; padding: 16px 20px; margin: 4px 0 18px; text-align: left; }
+  .nf b { font-size: 24px; display: block; } .nf p { margin: 6px 0 0; color: var(--ink); font-size: 18px; }
+  .searching { display: flex; align-items: center; justify-content: center; gap: 12px; font-weight: 700; color: var(--brand); margin: -6px 0 14px; }
+  .dim { opacity: .35; pointer-events: none; }
+  .rstat { color: var(--muted); font-size: 16px; margin-top: 18px; }
+  .spinner.sm { width: 16px; height: 16px; border-width: 3px; }
   /* 在 App 裡（手機）：App 有自己的返回鍵，藏起右下角的同工鍵；手機畫面縮小字級 */
   .embed .staff { display: none; }
   @media (max-width: 520px) {
@@ -54,7 +60,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261005b"></script>
+<script src="common.js?v=20261005c"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -64,11 +70,11 @@
   var digits = '', families = [], fam = null, picked = {}, done = null, err = '', busy = false, via = 'phone';
   var idleTimer = null, countdown = 0, cdTimer = null, scanner = null;
   // 名單快取：解鎖後先下載今年的家庭和孩子，輸入末四碼時直接在這台裝置上找，不用等網路
-  var roster = null, rosterAt = 0, showCode = false;
+  var roster = null, rosterAt = 0, showCode = false, others = [], notFound = null;
   function loadRoster() {
     if (!key) return;
     W.call('roster', { key: key }).then(function (r) {
-      if (r.ok) { roster = r.families; rosterAt = Date.now(); showCode = !!r.showCode; }
+      if (r.ok) { roster = r.families; others = r.others || []; rosterAt = Date.now(); showCode = !!r.showCode; if (view === 'home') render(); }
       else if (r.error === 'bad_key' || r.error === 'not_configured') handleErr(r);
     });
   }
@@ -77,7 +83,7 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden && Date.now() - rosterAt > 60000) loadRoster(); });
 
   function go(v) { view = v; err = ''; render(); }
-  function reset() { digits = ''; families = []; fam = null; picked = {}; done = null; stopScan(); go(key ? 'home' : 'locked'); }
+  function reset() { notFound = null; digits = ''; families = []; fam = null; picked = {}; done = null; stopScan(); go(key ? 'home' : 'locked'); }
 
   // 沒人操作 60 秒就回首頁，避免下一位看到上一家的孩子
   function touch() {
@@ -121,7 +127,7 @@
         var k = b.getAttribute('data-k');
         if (k === 'clr') digits = ''; else if (k === 'del') digits = digits.slice(0, -1);
         else if (digits.length < max) digits += k;
-        err = ''; render();
+        err = ''; notFound = null; render();
         if (digits.length === max && onFull) onFull();
       };
     });
@@ -131,11 +137,16 @@
     locked: function () {
       return '<section class="card center"><h2>' + t('ci_lock_title') + '</h2><p>' + t('ci_lock_hint') + '</p>' +
         '<input type="password" id="pw" autocomplete="off" style="max-width:360px;text-align:center;font-size:28px">' +
-        '<div class="actions"><button class="btn" id="unlock"' + (busy ? ' disabled' : '') + '>' + t('ci_unlock') + '</button></div></section>';
+        '<div class="actions"><button class="btn" id="unlock"' + (busy ? ' disabled' : '') + '>' + (busy ? t('ci_checking') : t('ci_unlock')) + '</button></div></section>';
     },
     home: function () {
-      return '<section class="center"><h2>' + t('ci_enter') + '</h2>' + pinBoxes(4) + pad() +
-        '<div class="actions"><button class="btn ghost" id="scan">📷 ' + t('ci_scan') + '</button></div></section>';
+      var nf = notFound ? '<div class="nf" role="alert"><b>' + esc(t(notFound.enrolled ? 'ci_nf_title' : 'ci_ne_title', { n: notFound.n || 'QR' })) + '</b>' +
+        '<p>' + esc(t(notFound.enrolled ? 'ci_nf_body' : 'ci_ne_body')) + '</p></div>' : '';
+      var st = '<p class="rstat">' + (roster ? '✓ ' + esc(t('ci_roster_ok', { n: roster.length })) : '<span class="spinner sm"></span> ' + esc(t('ci_roster_wait'))) + '</p>';
+      return '<section class="center">' + nf + '<h2>' + t('ci_enter') + '</h2>' + pinBoxes(4) +
+        (busy ? '<div class="searching"><span class="spinner"></span> ' + esc(t('ci_searching')) + '</div>' : '') +
+        '<div class="' + (busy ? 'dim' : '') + '">' + pad() + '</div>' +
+        '<div class="actions"><button class="btn ghost" id="scan"' + (busy ? ' disabled' : '') + '>📷 ' + t('ci_scan') + '</button></div>' + st + '</section>';
     },
     scan: function () {
       return '<section class="center"><h2>' + t('ci_scan') + '</h2><p>' + t('ci_scan_hint') + '</p><div id="reader"></div>' +
@@ -214,16 +225,17 @@
       digits = '';
       families = roster.filter(function (f) { return q.qr ? f.qr && f.qr === String(q.qr).trim() : f.last4 === q.last4; })
         .map(function (f) { return { fid: f.fid, label: f.label, kids: f.kids.map(function (k) { return Object.assign({}, k); }) }; });
-      if (!families.length) { view = 'home'; err = t('ci_none'); render(); return; }
+      if (!families.length) { if (q.qr) err = t('ci_none'); else notFound = { n: q.last4, enrolled: others.indexOf(q.last4) < 0 }; view = 'home'; render(); return; }
       if (families.length === 1) pickFamily(families[0]); else go('families');
       return;
     }
-    busy = true;
+    busy = true; render();
     W.call('lookup', Object.assign({ key: key }, q)).then(function (r) {
       busy = false; digits = '';
+      if (!r.ok && r.error === 'not_enrolled') { notFound = { n: q.last4 || 'QR', enrolled: false }; view = 'home'; render(); return; }
       if (!r.ok) return handleErr(r);
       families = r.families;
-      if (!families.length) { view = 'home'; err = t('ci_none'); render(); return; }
+      if (!families.length) { if (q.qr) err = t('ci_none'); else notFound = { n: q.last4, enrolled: true }; view = 'home'; render(); return; }
       if (families.length === 1) pickFamily(families[0]); else go('families');
     });
   }

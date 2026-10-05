@@ -964,6 +964,7 @@ function lookup_(req) {
       }),
     };
   }).filter(function (f) { return f.kids.length > 0; });
+  if (!out.length && fams.length) return { ok: false, error: 'not_enrolled' };
   return { ok: true, families: out };
 }
 
@@ -983,7 +984,11 @@ function roster_(req) {
   var out = rows_(SHEET.FAMILIES).filter(function (f) { return byFam[f['家庭編號']]; }).map(function (f) {
     return { fid: f['家庭編號'], last4: digits_(f['手機']).slice(-4) || ('0000' + String(f['手機末四碼'] || '')).slice(-4), qr: String(f['QR代碼'] || ''), label: maskName_(parentName_(f)), kids: byFam[f['家庭編號']] };
   });
-  return { ok: true, families: out, showCode: isTrue_(s['顯示接送碼']) };
+  // 有家庭資料但今年沒報 Awana 的末四碼（只有號碼），讓簽到站能說「今年還沒報名」而不是「找不到」
+  var others = rows_(SHEET.FAMILIES).filter(function (f) { return !byFam[f['家庭編號']]; }).map(function (f) {
+    return digits_(f['手機']).slice(-4) || ('0000' + String(f['手機末四碼'] || '')).slice(-4);
+  });
+  return { ok: true, families: out, others: others, showCode: isTrue_(s['顯示接送碼']) };
 }
 
 function checkin_(req) {
