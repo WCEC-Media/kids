@@ -5,8 +5,6 @@
 
 ## 檔案
 
-網址：https://wcec-media.github.io/kids/
-
 | 檔案 | 放哪裡 | 做什麼 |
 |---|---|---|
 | `apps-script/Code.gs` | 兒童事工試算表 → 擴充功能 → Apps Script | 後端：報名、重複檢查、登入、家長專區、簽到 |
@@ -22,7 +20,7 @@
 `config.js` 的 `API_URL` 留空就是示範模式。它會在瀏覽器裡執行「真正的」後端程式，
 只是把 Google 試算表和寄信換成模擬的，資料只存在這台電腦的瀏覽器。
 
-1. 直接打開 https://wcec-media.github.io/kids/demo/ ，或在 Mac 的終端機進到這個資料夾，執行 `python3 -m http.server 8770`
+1. 在 Mac 的終端機進到這個資料夾，執行 `python3 -m http.server 8770`
 2. 打開 `http://localhost:8770/demo/index.html`：這裡有**模擬信箱**（登入信會出現在這裡）、**試算表內容**、**重設示範資料**
 3. 從那頁的連結打開報名表、家長專區、簽到站（密碼 `123456`）
 
@@ -99,7 +97,7 @@
 
 1. 建一份新的試算表（例如「兒童事工 Awana」），只分享給兒童事工負責人。不要跟 App 的公告／行事曆試算表放在一起。
 2. 擴充功能 → Apps Script，把 `Code.gs` 整份貼上，存檔。重新整理試算表 → 選單「兒童事工」→「初始設定」（第一次會要求授權，包含寄信和 Google Drive 權限；Drive 是存家長簽名用的）。
-3. 「設定」工作表：填**簽到站密碼**、**網站網址**（預設 https://wcec-media.github.io/kids/，結尾要有 `/`），確認學年。
+3. 「設定」工作表：填**簽到站密碼**、**網站網址**（這個網站的 GitHub Pages 網址，結尾要有 `/`），確認學年。
 4. Apps Script → 部署 → 新增部署作業 → 網頁應用程式；執行身分「我」、存取權「所有人」。複製網址貼到 `config.js` 的 `API_URL`。
 5. 推送到這個 repo，GitHub Pages 會自動更新（正式上線後可以刪掉 `demo` 資料夾）。
 6. 前台 iPad：Safari 打開 `checkin.html` → 同工輸入密碼 → 設定 → 輔助使用 → 引導使用模式。
