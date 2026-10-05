@@ -89,3 +89,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--b
 
 /* 很窄的手機：兩個選項上下排 */
 @media (max-width: 360px) { .two { grid-template-columns: 1fr; } }
+
+/* 鍵盤打開時藏起底部按鈕列，留出捲動空間 */
+.typing .navbar { display: none; }
+.typing .wrap { padding-bottom: 50vh; }

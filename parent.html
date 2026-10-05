@@ -114,6 +114,7 @@
   .sheet .bar .done { font-weight: 600; text-align: right; }
   .sheet .bar .done[disabled] { opacity: .4; }
   .sheet .scroll { overflow: auto; flex: 1; padding-bottom: 48px; -webkit-overflow-scrolling: touch; }
+  .typing .sheet .scroll { padding-bottom: 50vh; } .typing main { padding-bottom: 50vh; }
   @media (prefers-reduced-motion: reduce) { .sheet, .sheet.on { transition: opacity .2s; transform: none; } .sheet { opacity: 0; } .sheet.on { opacity: 1; } }
 
   .check { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%; border: 1.5px solid var(--label3); display: grid; place-items: center; }
@@ -147,7 +148,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261004c"></script>
+<script src="common.js?v=20261004d"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -589,6 +590,18 @@
     b.querySelector('[data-yes]').onclick = function () { b.remove(); onYes(); };
     b.querySelector('[data-yes]').focus();
   }
+
+  // 鍵盤打開時把正在填的欄位捲到畫面中間，下方多留空間才捲得上去
+  function isField(el) { return el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && el.type !== 'checkbox'; }
+  document.addEventListener('focusin', function (e) {
+    if (!isField(e.target)) return;
+    document.body.classList.add('typing');
+    var el = e.target;
+    setTimeout(function () { if (document.activeElement === el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 350);
+  });
+  document.addEventListener('focusout', function () {
+    setTimeout(function () { if (!isField(document.activeElement)) document.body.classList.remove('typing'); }, 100);
+  });
 
   view = 'loading'; render();
   W.appToken(function () { if (wait) go('wait'); else loadMe(); });
