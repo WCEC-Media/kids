@@ -37,7 +37,7 @@
     };
     step = 0; tried = false; topError = ''; dupChecked = false; oldEmail = false; result = null;
   }
-  function newKid() { return { first: '', last: S && S.parent.last || (S && S.kids[0] && S.kids[0].last) || '', birthday: '', grade: '', awana: true, ss: false, notes: '' }; }
+  function newKid() { return { first: '', last: S && S.parent.last || (S && S.kids[0] && S.kids[0].last) || '', birthday: '', dob: { m: '', d: '', y: '' }, grade: '', awana: true, ss: false, notes: '' }; }
   function newPickup() { return { first: '', last: '', relation: '', phone: '' }; }
   function digits(v) { return String(v || '').replace(/\D/g, ''); }
   function clsOf(g) { var m = cfg.grades.filter(function (x) { return x.grade === g; })[0]; return m ? m.cls : ''; }
@@ -49,7 +49,8 @@
     if (step === 0) S.kids.forEach(function (k, i) {
       if (!k.first.trim()) e['kids.' + i + '.first'] = t('err_required');
       if (!k.last.trim()) e['kids.' + i + '.last'] = t('err_required');
-      if (!k.birthday) e['kids.' + i + '.birthday'] = t('err_bday');
+      var dv = W.dobValue(k.dob);
+      if (dv === 'bad') e['kids.' + i + '.birthday'] = t('err_bday_bad'); else if (!dv) e['kids.' + i + '.birthday'] = t('err_bday');
       if (!k.grade) e['kids.' + i + '.grade'] = t('err_required');
       if (!k.awana && !k.ss) e['kids.' + i + '.programs'] = t('err_prog');
     });
@@ -83,6 +84,12 @@
       (opts.req ? '<span class="req">' + t('required') + '</span>' : opts.opt ? '<span class="opt">' + t('optional') + '</span>' : '') + '</label>' +
       input + (opts.hint ? '<p class="hint">' + opts.hint + '</p>' : '') + '<div class="msg">' + esc(err || '') + '</div></div>';
   }
+  // 生日：月／日／年三個下拉選單
+  function dobField(i, k) {
+    var err = tried && errors()['kids.' + i + '.birthday'];
+    return '<div class="' + (err ? 'bad' : '') + '"><label class="f" for="kids.' + i + '.birthday_m">' + t('birthday') + '<span class="req">' + t('required') + '</span></label>' +
+      W.dateSelects('kids.' + i + '.birthday', k.dob, 'data-dob="' + i + '"') + '<div class="msg">' + esc(err || '') + '</div></div>';
+  }
   function get(path) { return path.split('.').reduce(function (o, k) { return o == null ? '' : o[k]; }, S) || ''; }
   function set(path, v) { var ks = path.split('.'), o = S; ks.slice(0, -1).forEach(function (k) { o = o[k]; }); o[ks[ks.length - 1]] = v; }
 
@@ -104,8 +111,8 @@
         return '<div class="card kidcard"><div class="headrow"><h3>' + t('kid_n', { n: i + 1 }) + '</h3>' +
           (S.kids.length > 1 ? '<button class="btn ghost small" type="button" data-rmkid="' + i + '">' + t('remove') + '</button>' : '') + '</div>' +
           '<div class="row">' + field('kids.' + i + '.first', t('first'), { req: 1 }) + field('kids.' + i + '.last', t('last'), { req: 1 }) + '</div>' +
-          '<div class="row">' + field('kids.' + i + '.birthday', t('birthday'), { req: 1, type: 'date' }) +
-          field('kids.' + i + '.grade', t('grade_year', { year: esc(cfg.year) }), { req: 1, select: gradeOpts(k.grade) }) + '</div>' +
+          dobField(i, k) +
+          field('kids.' + i + '.grade', t('grade_year', { year: esc(cfg.year) }), { req: 1, select: gradeOpts(k.grade) }) +
           '<div class="' + (pe ? 'bad' : '') + '"><label class="f">' + t('programs') + '<span class="req">' + t('at_least_one') + '</span></label><div class="two">' +
           '<label class="choice"><input type="checkbox" data-bind="kids.' + i + '.awana"' + (k.awana ? ' checked' : '') + '><span><b>Awana</b><span class="d">' + t('awana_d') + '</span></span></label>' +
           '<label class="choice"><input type="checkbox" data-bind="kids.' + i + '.ss"' + (k.ss ? ' checked' : '') + '><span><b>' + t('ss') + '</b><span class="d">' + t('ss_d') + '</span></span></label></div>' +
@@ -211,6 +218,15 @@
         set(path, el.type === 'checkbox' ? el.checked : el.value);
         if (/^(parent|kids\.\d+\.(first|last))/.test(path)) dupChecked = false;   // 姓名、電話、Email 改了就要重新檢查重複
         if (tried || el.tagName === 'SELECT' || el.type === 'checkbox') { if (step !== 3) render(); }
+      });
+    });
+    app.querySelectorAll('[data-dob]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        var k = S.kids[+el.getAttribute('data-dob')];
+        k.dob[el.getAttribute('data-part')] = el.value;
+        var dv = W.dobValue(k.dob);
+        k.birthday = dv === 'bad' ? '' : dv;
+        if (tried) render();
       });
     });
     app.querySelectorAll('[data-rmkid]').forEach(function (b) { b.onclick = function () { S.kids.splice(+b.getAttribute('data-rmkid'), 1); render(); }; });

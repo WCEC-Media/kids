@@ -82,3 +82,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--b
 .dlg { border-radius: 14px; }
 .dlg h2 { font-size: 22px; margin: 0 0 10px; }
 .toast { background: rgba(28,28,30,.92); color: #fff; font-weight: 600; }
+
+/* 生日：月／日／年 */
+.dob { display: grid; grid-template-columns: 1.15fr 1fr 1.2fr; gap: 8px; }
+.dob select { min-width: 0; padding-left: 12px; padding-right: 30px; background-position: right 10px center; }

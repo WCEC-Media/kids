@@ -229,7 +229,7 @@
     sign_h: 'Parent Signature', sign_hint: '請用手指在下面的框裡簽名。', sign_clear: '清除重簽', sign_need: '請在框裡簽名',
     sum_h: '確認資料', edit_kids: '修改孩子資料', edit_parent: '修改家長資料',
     next: '下一步', prev: '上一步', submit_reg: '送出報名', choose: '請選擇',
-    err_bday: '請選擇生日', err_prog: '至少選一個項目', e_signature: '簽名沒有成功送出，請再簽一次。',
+    err_bday: '請選擇生日（月、日、年都要選）', err_bday_bad: '這個日期不存在，請再確認', dob_m: '月', dob_d: '日', dob_y: '年', err_prog: '至少選一個項目', e_signature: '簽名沒有成功送出，請再簽一次。',
     e_need_pickup: '請至少填一位接送人（緊急聯絡人）',
     p_family_of: '{name} 的家庭', p_add_kid: '新增孩子', p_last: '去年 {grade}',
     p_parent: '家長', p_phone: '手機', p_emergency: '緊急聯絡人', p_pickups: '其他接送人', p_address: '住址', p_second: '第二位家長',
@@ -257,7 +257,7 @@
     sign_h: 'Parent Signature', sign_hint: 'Sign with your finger in the box below.', sign_clear: 'Clear', sign_need: 'Please sign in the box',
     sum_h: 'Review', edit_kids: 'Edit children', edit_parent: 'Edit parent',
     next: 'Next', prev: 'Back', submit_reg: 'Submit', choose: 'Choose',
-    err_bday: 'Choose a birthday', err_prog: 'Choose at least one program', e_signature: 'The signature didn\'t go through. Please sign again.',
+    err_bday: 'Choose month, day and year', err_bday_bad: 'That date doesn\'t exist. Please check it.', dob_m: 'Month', dob_d: 'Day', dob_y: 'Year', err_prog: 'Choose at least one program', e_signature: 'The signature didn\'t go through. Please sign again.',
     e_need_pickup: 'Please add at least one pickup person (emergency contact)',
     p_family_of: '{name}\'s family', p_add_kid: 'Add a child', p_last: 'Last year: {grade}',
     p_parent: 'Parent', p_phone: 'Phone', p_emergency: 'Emergency contact', p_pickups: 'Other pickups', p_address: 'Address', p_second: 'Second parent',
@@ -415,6 +415,32 @@
     });
   }
 
+  // ─── 生日：月／日／年 三個下拉選單（iPhone 的日期輪盤長輩不好選，空白時還會顯示今天，像是已經填了）───
+  var MON_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function dobParts(v) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ''); return m ? { y: m[1], m: String(+m[2]), d: String(+m[3]) } : { y: '', m: '', d: '' }; }
+  function dateSelects(id, value, attrs) {
+    var p = typeof value === 'object' && value ? value : dobParts(value), a = attrs || '', yNow = new Date().getFullYear(), i, h;
+    function opt(v, label, sel) { return '<option value="' + v + '"' + (String(sel) === String(v) ? ' selected' : '') + '>' + label + '</option>'; }
+    h = '<div class="dob"><select id="' + id + '_m" data-part="m" aria-label="' + t('dob_m') + '" ' + a + '>' + opt('', t('dob_m'), p.m);
+    for (i = 1; i <= 12; i++) h += opt(i, lang === 'en' ? MON_EN[i - 1] : i + ' 月', p.m);
+    h += '</select><select id="' + id + '_d" data-part="d" aria-label="' + t('dob_d') + '" ' + a + '>' + opt('', t('dob_d'), p.d);
+    for (i = 1; i <= 31; i++) h += opt(i, lang === 'en' ? i : i + ' 日', p.d);
+    h += '</select><select id="' + id + '_y" data-part="y" aria-label="' + t('dob_y') + '" ' + a + '>' + opt('', t('dob_y'), p.y);
+    for (i = yNow; i >= yNow - 19; i--) h += opt(i, i, p.y);
+    return h + '</select></div>';
+  }
+  // 回傳 'yyyy-mm-dd'；沒選完回傳 ''；日期不存在（例如 2/30）回傳 'bad'
+  function dobValue(p) {
+    if (!p || !p.y || !p.m || !p.d) return '';
+    var y = +p.y, m = +p.m, d = +p.d, dt = new Date(y, m - 1, d);
+    if (dt.getMonth() !== m - 1) return 'bad';
+    return y + '-' + (m < 10 ? '0' : '') + m + '-' + (d < 10 ? '0' : '') + d;
+  }
+  function readDate(root, id) {
+    function v(k) { var el = root.querySelector('#' + id + '_' + k); return el ? el.value : ''; }
+    return dobValue({ y: v('y'), m: v('m'), d: v('d') });
+  }
+
   function fmtPhone(p) {
     p = String(p || '').replace(/\D/g, '');
     return p.length === 10 ? p.slice(0, 3) + '-' + p.slice(3, 6) + '-' + p.slice(6) : p;
@@ -465,7 +491,7 @@
   window.WCEC = {
     t: t, lang: function () { return lang; }, setLang: setLang, call: call, errText: errText, DEMO: DEMO, EMBED: EMBED,
     store: store, forget: forget, esc: esc, loadScript: loadScript, link: link, fmtPhone: fmtPhone,
-    getToken: getToken, setToken: setToken, appToken: appToken, deviceLabel: deviceLabel, dialog: dialog, demoBar: demoBar, toast: toast, gradeLabel: gradeLabel,
+    getToken: getToken, setToken: setToken, appToken: appToken, dateSelects: dateSelects, dobParts: dobParts, dobValue: dobValue, readDate: readDate, deviceLabel: deviceLabel, dialog: dialog, demoBar: demoBar, toast: toast, gradeLabel: gradeLabel,
     relationLabel: relationLabel, relationOptions: relationOptions, programLabel: programLabel, RELEASE_HTML: RELEASE_HTML, signaturePad: signaturePad,
   };
 })();
