@@ -112,7 +112,7 @@
 家長專區在 App 裡用 `webview_flutter` 嵌入，看起來像 App 的一頁：
 
 - 開 `parent.html?embed=1&lang=zh&theme=light`（語言、深淺色跟著 App）。網頁會藏起自己的標題和語言鍵，標題列和返回鍵由 App 提供。
-- **登入權杖存在 iPhone 鑰匙圈**：網頁登入成功會透過 JavaScript 頻道 `WCECApp` 送出 `{"type":"token","token":"…"}`，App 存進鑰匙圈（`flutter_secure_storage`）；下次打開時，App 在頁面載入前執行 `window.__WCEC_APP_TOKEN = "…"`。登出時會送出空的 token。
+- **登入權杖存在 iPhone 鑰匙圈**：網頁登入成功會透過 JavaScript 頻道 `WCECApp` 送出 `{"type":"token","token":"…"}`，App 存進鑰匙圈（`flutter_secure_storage`）；下次打開時，網頁先送出 `{"type":"hello"}`，App 從鑰匙圈讀出權杖，執行 `window.__wcecAppToken("…")` 交回（沒有就交空字串；網頁最多等 1.5 秒）。App 端程式在 church_app 的 `lib/screens/kids_parent_screen.dart`。登出時會送出空的 token。
 - 載入中、沒網路的畫面由 App 自己顯示；教會網域以外的連結用外部瀏覽器打開。
 - App Store 隱私標示和隱私政策要加上：為活動報名與簽到收集姓名、Email、電話（資料存在教會的 Google 帳號）。
 
