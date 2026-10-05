@@ -370,6 +370,19 @@
     if (tok) store('wcec_token', tok); else forget('wcec_token');
     try { if (window.WCECApp && window.WCECApp.postMessage) window.WCECApp.postMessage(JSON.stringify({ type: 'token', token: tok || '' })); } catch (e) {}
   }
+  // App 裡：開頁時跟 App 要鑰匙圈裡的權杖（App 用 window.__wcecAppToken(tok) 回覆），最多等 1.5 秒
+  function appToken(cb) {
+    var ch = window.WCECApp;
+    if (!EMBED || window.__WCEC_APP_TOKEN || !(ch && ch.postMessage)) { cb(); return; }
+    var done = false;
+    function fin() { if (!done) { done = true; cb(); } }
+    window.__wcecAppToken = function (tok) {
+      if (tok && typeof tok === 'string') { window.__WCEC_APP_TOKEN = tok; store('wcec_token', tok); }
+      fin();
+    };
+    try { ch.postMessage(JSON.stringify({ type: 'hello' })); } catch (e) { fin(); return; }
+    setTimeout(fin, 1500);
+  }
   function deviceLabel() {
     var ua = navigator.userAgent;
     var d = /iPad/.test(ua) ? 'iPad' : /iPhone/.test(ua) ? 'iPhone' : /Android/.test(ua) ? 'Android' : /Mac/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : '其他';
@@ -452,7 +465,7 @@
   window.WCEC = {
     t: t, lang: function () { return lang; }, setLang: setLang, call: call, errText: errText, DEMO: DEMO, EMBED: EMBED,
     store: store, forget: forget, esc: esc, loadScript: loadScript, link: link, fmtPhone: fmtPhone,
-    getToken: getToken, setToken: setToken, deviceLabel: deviceLabel, dialog: dialog, demoBar: demoBar, toast: toast, gradeLabel: gradeLabel,
+    getToken: getToken, setToken: setToken, appToken: appToken, deviceLabel: deviceLabel, dialog: dialog, demoBar: demoBar, toast: toast, gradeLabel: gradeLabel,
     relationLabel: relationLabel, relationOptions: relationOptions, programLabel: programLabel, RELEASE_HTML: RELEASE_HTML, signaturePad: signaturePad,
   };
 })();

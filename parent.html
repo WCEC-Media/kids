@@ -577,7 +577,8 @@
     b.querySelector('[data-yes]').focus();
   }
 
-  if (wait) go('wait'); else loadMe();
+  view = 'loading'; render();
+  W.appToken(function () { if (wait) go('wait'); else loadMe(); });
   window.__demoSign = function () { if (pad) pad.demo(); };   // 自動測試用
 })();
 </script>
