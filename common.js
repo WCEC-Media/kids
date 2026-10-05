@@ -421,7 +421,7 @@
   function dateSelects(id, value, attrs) {
     var p = typeof value === 'object' && value ? value : dobParts(value), a = attrs || '', yNow = new Date().getFullYear(), i, h;
     function opt(v, label, sel) { return '<option value="' + v + '"' + (String(sel) === String(v) ? ' selected' : '') + '>' + label + '</option>'; }
-    h = '<div class="dob"><select id="' + id + '_m" data-part="m" aria-label="' + t('dob_m') + '" ' + a + '>' + opt('', t('dob_m'), p.m);
+    h = '<div class="dob" style="display:grid;grid-template-columns:1.15fr 1fr 1.2fr;gap:8px"><select id="' + id + '_m" data-part="m" aria-label="' + t('dob_m') + '" ' + a + '>' + opt('', t('dob_m'), p.m);
     for (i = 1; i <= 12; i++) h += opt(i, lang === 'en' ? MON_EN[i - 1] : i + ' 月', p.m);
     h += '</select><select id="' + id + '_d" data-part="d" aria-label="' + t('dob_d') + '" ' + a + '>' + opt('', t('dob_d'), p.d);
     for (i = 1; i <= 31; i++) h += opt(i, lang === 'en' ? i : i + ' 日', p.d);

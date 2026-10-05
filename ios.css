@@ -85,4 +85,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--b
 
 /* 生日：月／日／年 */
 .dob { display: grid; grid-template-columns: 1.15fr 1fr 1.2fr; gap: 8px; }
-.dob select { min-width: 0; padding-left: 12px; padding-right: 30px; background-position: right 10px center; }
+.dob select { width: 100%; min-width: 0; font-size: 17px; padding-left: 12px; padding-right: 28px; background-position: right 10px center; }
+
+/* 很窄的手機：兩個選項上下排 */
+@media (max-width: 360px) { .two { grid-template-columns: 1fr; } }
