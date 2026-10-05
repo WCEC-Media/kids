@@ -38,7 +38,7 @@ var HEADERS = {
            '第二家長 First Name', '第二家長 Last Name', '第二家長關係', '第二家長手機',
            '緊急聯絡人', '緊急聯絡人關係', '緊急聯絡人電話', '其他接送人', '願意服事', 'QR代碼', '備註'],
   '孩子': ['孩子編號', '家庭編號', 'First Name', 'Last Name', '生日', '過敏/特殊需求', '建立時間', '狀態',
-           '家長手機（手動輸入用）', '年級（手動輸入用）'],
+           '家長手機（手動輸入用）', '年級（手動輸入用）', '家長姓名'],
   '報名': ['學年', '項目', '孩子編號', '家庭編號', '孩子姓名', '年級', '班別', '報名時間', '狀態', '備註'],
   '同意書': ['學年', '家庭編號', '簽名人', '簽名', '簽名時間', '來源'],
   '簽到紀錄': ['日期', '孩子編號', '孩子姓名', '班別', '家庭編號', '簽到時間',
@@ -384,6 +384,7 @@ function programsOf_(k) { return PROGRAMS.filter(function (p, i) { return i === 
 
 // 同一個家庭裡同名的孩子視為同一個人：只補報名，不重複建立
 function addKidsAndEnroll_(fid, kids, year, now, note) {
+  var fam = rows_(SHEET.FAMILIES).filter(function (f) { return f['家庭編號'] === fid; })[0] || {};
   var existing = {};
   kidsOfFamily_(fid).forEach(function (k) { existing[normName_(kidName_(k))] = k; });
   var gm = gradeMap_();
@@ -393,7 +394,8 @@ function addKidsAndEnroll_(fid, kids, year, now, note) {
     var k = existing[normName_(name)];
     if (!k) {
       k = { '孩子編號': newKidId_(), '家庭編號': fid, 'First Name': clean_(v.first), 'Last Name': clean_(v.last),
-            '生日': clean_(v.birthday), '過敏/特殊需求': clean_(v.notes), '建立時間': now, '狀態': '有效' };
+            '生日': clean_(v.birthday), '過敏/特殊需求': clean_(v.notes), '建立時間': now, '狀態': '有效',
+            '家長手機（手動輸入用）': String(fam['手機'] || ''), '家長姓名': parentName_(fam) };
       appendObj_(SHEET.KIDS, k);
       existing[normName_(name)] = k;
     }
@@ -713,8 +715,19 @@ function saveFamily_(req) {
     f['願意服事'] = vol;
     writeRow_(SpreadsheetApp.getActive().getSheetByName(SHEET.FAMILIES), SHEET.FAMILIES, f);
     a.fam = f;
+    syncKidParent_(f);
     return { ok: true, data: familyView_(a) };
   } finally { lock.releaseLock(); }
+}
+
+// 「孩子」分頁的家長姓名、手機只是方便同工看，家長改資料時跟著更新
+function syncKidParent_(f) {
+  var sheet = SpreadsheetApp.getActive().getSheetByName(SHEET.KIDS);
+  kidsOfFamily_(f['家庭編號']).forEach(function (k) {
+    if (k['家長姓名'] === parentName_(f) && String(k['家長手機（手動輸入用）']) === String(f['手機'])) return;
+    k['家長姓名'] = parentName_(f); k['家長手機（手動輸入用）'] = String(f['手機']);
+    writeRow_(sheet, SHEET.KIDS, k);
+  });
 }
 
 /**
