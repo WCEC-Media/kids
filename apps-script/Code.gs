@@ -85,8 +85,10 @@ function setup() {
     }
   });
   var st = ss.getSheetByName(SHEET.SETTINGS);
+  st.getRange(1, 2, 50, 1).setNumberFormat('@');   // 值存成文字：2026-27 不會被當成日期
   if (st.getLastRow() === 1) st.getRange(2, 1, DEFAULT_SETTINGS.length, 3).setValues(DEFAULT_SETTINGS);
   var cl = ss.getSheetByName(SHEET.CLASSES);
+  cl.getRange(1, 1, 50, 1).setNumberFormat('@');
   if (cl.getLastRow() === 1) cl.getRange(2, 1, DEFAULT_CLASSES.length, 2).setValues(DEFAULT_CLASSES);
   // 電話、ZIP、年級、學年存成文字，避免開頭的 0 被吃掉、2026-27 被當成日期
   textCols_(SHEET.FAMILIES, ['手機', '手機末四碼', 'ZIP', '第二家長手機', '緊急聯絡人電話']);
