@@ -211,6 +211,123 @@
     },
   };
 
+  // ─────────────── 第二版：報名表 4 步驟、家長專區 iPhone 風格 ───────────────
+  Object.assign(STR.zh, {
+    r_title: 'Awana／主日學報名', r_step: '第 {n} 步，共 4 步：{name}',
+    r_s1: '孩子', r_s2: '家長', r_s3: '接送與緊急聯絡', r_s4: '服事與同意書',
+    r_kids_h: '孩子資料', r_kids_lead: '請填英文名字。每個孩子可以分別選要參加的項目。',
+    birthday: '生日', grade_year: '{year} 學年的年級', programs: '要參加的項目', at_least_one: '至少選一個',
+    awana: 'Awana', awana_d: '週五晚上', ss: '主日學', ss_d: '主日上午',
+    r_parent_h: '家長／監護人', r_parent_lead: '您的 Email 之後用來登入家長專區，不用密碼。',
+    relation: '與孩子的關係', relation_short: '關係', optional: '選填',
+    address: '住址', street: 'Street address', city: 'City', state: 'State', zip: 'ZIP',
+    second_h: '第二位家長／監護人', second_hint: '填了 Email，他也能用自己的 Email 登入家長專區。',
+    pick_h: '授權接送人', pick_lead: '除了家長以外，可以來接孩子的人。第一位同時是<b>緊急聯絡人</b>（聯絡不到家長時打給他）。',
+    pick_n: '接送人 {n}', pick_1: '接送人 1 · 緊急聯絡人', add_pickup: '＋ 再加一位',
+    vol_h: '願意一起服事嗎？', vol_lead: '不勾也沒關係。', vol_awana: '我願意在 Awana 服事', vol_ss: '我願意在主日學服事',
+    release_h: 'Release of Liability', release_lead: '家長同意書，內容跟紙本報名表相同。',
+    sign_h: 'Parent Signature', sign_hint: '請用手指在下面的框裡簽名。', sign_clear: '清除重簽', sign_need: '請在框裡簽名',
+    sum_h: '確認資料', edit_kids: '修改孩子資料', edit_parent: '修改家長資料',
+    next: '下一步', prev: '上一步', submit_reg: '送出報名', choose: '請選擇',
+    err_bday: '請選擇生日', err_prog: '至少選一個項目', e_signature: '簽名沒有成功送出，請再簽一次。',
+    e_need_pickup: '請至少填一位接送人（緊急聯絡人）',
+    p_family_of: '{name} 的家庭', p_add_kid: '新增孩子', p_last: '去年 {grade}',
+    p_parent: '家長', p_phone: '手機', p_emergency: '緊急聯絡人', p_pickups: '其他接送人', p_address: '住址', p_second: '第二位家長',
+    p_contact_title: '聯絡資料', p_enroll_title: '報名 {year}', p_submit: '送出', p_save: '儲存', p_cancel: '取消',
+    p_this_year: '今年參加', p_grade_this: '今年年級', p_enroll_hint: '勾選今年要參加的孩子和項目，年級已經幫您往上一級。',
+    p_sign_title: '{year} 家長同意書', p_signed: '今年的同意書已經簽過了。', p_release_more: '看同意書全文',
+    p_withdraw: '這學年不參加了', p_programs_this: '今年參加的項目',
+    p_none: '還沒有孩子的資料。', p_closed: '{year} 目前沒有開放報名。',
+    p_signout: '登出這支手機', p_invite: '邀請另一位家長', p_main_you: '主要 · 您', p_main: '主要', p_you: '您',
+  });
+  Object.assign(STR.en, {
+    r_title: 'Awana / Sunday School Registration', r_step: 'Step {n} of 4: {name}',
+    r_s1: 'Children', r_s2: 'Parent', r_s3: 'Pickup & emergency', r_s4: 'Serving & release',
+    r_kids_h: 'Children', r_kids_lead: 'Please use English names. Choose programs for each child.',
+    birthday: 'Birthday', grade_year: 'Grade in {year}', programs: 'Programs', at_least_one: 'choose at least one',
+    awana: 'Awana', awana_d: 'Friday evening', ss: 'Sunday School', ss_d: 'Sunday morning',
+    r_parent_h: 'Parent / guardian', r_parent_lead: 'Your email is how you sign in to the Parent Area. No password.',
+    relation: 'Relationship to child', relation_short: 'Relationship', optional: 'optional',
+    address: 'Address', street: 'Street address', city: 'City', state: 'State', zip: 'ZIP',
+    second_h: 'Second parent / guardian', second_hint: 'With an email, they can sign in to the Parent Area too.',
+    pick_h: 'Authorized pickup', pick_lead: 'People other than parents who may pick up your children. The first one is also the <b>emergency contact</b>.',
+    pick_n: 'Pickup {n}', pick_1: 'Pickup 1 · Emergency contact', add_pickup: '+ Add another',
+    vol_h: 'Would you like to serve?', vol_lead: 'Optional.', vol_awana: 'I\'d like to volunteer at Awana', vol_ss: 'I\'d like to volunteer at Sunday School',
+    release_h: 'Release of Liability', release_lead: 'Same as the paper registration form.',
+    sign_h: 'Parent Signature', sign_hint: 'Sign with your finger in the box below.', sign_clear: 'Clear', sign_need: 'Please sign in the box',
+    sum_h: 'Review', edit_kids: 'Edit children', edit_parent: 'Edit parent',
+    next: 'Next', prev: 'Back', submit_reg: 'Submit', choose: 'Choose',
+    err_bday: 'Choose a birthday', err_prog: 'Choose at least one program', e_signature: 'The signature didn\'t go through. Please sign again.',
+    e_need_pickup: 'Please add at least one pickup person (emergency contact)',
+    p_family_of: '{name}\'s family', p_add_kid: 'Add a child', p_last: 'Last year: {grade}',
+    p_parent: 'Parent', p_phone: 'Phone', p_emergency: 'Emergency contact', p_pickups: 'Other pickups', p_address: 'Address', p_second: 'Second parent',
+    p_contact_title: 'Contact information', p_enroll_title: 'Register for {year}', p_submit: 'Submit', p_save: 'Save', p_cancel: 'Cancel',
+    p_this_year: 'Attending this year', p_grade_this: 'Grade this year', p_enroll_hint: 'Check the children and programs for this year. Grades have been moved up one level.',
+    p_sign_title: '{year} Release of Liability', p_signed: 'You already signed this year\'s release.', p_release_more: 'Read the full release',
+    p_withdraw: 'Not attending this year', p_programs_this: 'Programs this year',
+    p_none: 'No children yet.', p_closed: 'Registration for {year} is not open right now.',
+    p_signout: 'Sign out on this phone', p_invite: 'Invite another parent', p_main_you: 'Main · You', p_main: 'Main', p_you: 'You',
+  });
+
+  // 關係選單：試算表存中文，畫面依語言顯示
+  var RELATIONS = [['父親', 'Father'], ['母親', 'Mother'], ['祖父母', 'Grandparent'], ['監護人', 'Guardian'],
+                   ['親戚', 'Relative'], ['朋友', 'Friend'], ['保母', 'Babysitter'], ['其他', 'Other']];
+  function relationLabel(v) { var r = RELATIONS.filter(function (x) { return x[0] === v; })[0]; return r ? (lang === 'en' ? r[1] : r[0]) : (v || ''); }
+  function relationOptions(sel, list) {
+    return '<option value="">' + t('choose') + '</option>' + RELATIONS.filter(function (r) { return !list || list.indexOf(r[0]) >= 0; }).map(function (r) {
+      return '<option value="' + r[0] + '"' + (r[0] === sel ? ' selected' : '') + '>' + (lang === 'en' ? r[1] : r[0]) + '</option>';
+    }).join('');
+  }
+  function programLabel(p) { return p === 'Awana' ? 'Awana' : t('ss'); }
+
+  // 同意書：跟紙本報名表一字不改
+  var RELEASE_HTML =
+    '<p>I hereby release WCEC, AWANA volunteers and Sunday School teachers, from any and all liability for damage to or loss of personal property, sickness or injury while participating in the Event activities.</p>' +
+    '<p>I hereby state that my child is in sufficient physical condition to accept all Event activities. I understand that participation in this program is strictly voluntary and I freely chose to participate.</p>' +
+    '<p>I understand that WCEC doesn’t provide medical coverage for me. I verify that I will be responsible for any medical costs my child may incur as a result of participation.</p>' +
+    '<p>I give permission for WCEC to photograph and making video my child(ren) for promotional and internal use.</p>';
+
+  // 手寫簽名板
+  function signaturePad(canvas) {
+    var ctx = canvas.getContext('2d'), drawing = false, strokes = 0, w = 0, h = 0;
+    function size() {
+      var r = canvas.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+      if (!r.width) return;
+      w = r.width; h = r.height;
+      canvas.width = w * d; canvas.height = h * d;
+      ctx.setTransform(d, 0, 0, d, 0, 0);
+      ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#1c2540';
+      strokes = 0;
+    }
+    function pt(e) { var r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+    canvas.addEventListener('pointerdown', function (e) {
+      if (!w) size();
+      canvas.setPointerCapture(e.pointerId); drawing = true; var p = pt(e); ctx.beginPath(); ctx.moveTo(p[0], p[1]);
+    });
+    canvas.addEventListener('pointermove', function (e) { if (!drawing) return; var p = pt(e); ctx.lineTo(p[0], p[1]); ctx.stroke(); strokes++; });
+    canvas.addEventListener('pointerup', function () { drawing = false; });
+    canvas.addEventListener('pointercancel', function () { drawing = false; });
+    setTimeout(size, 0);
+    return {
+      resize: size,
+      clear: function () { ctx.clearRect(0, 0, w, h); strokes = 0; },
+      isEmpty: function () { return strokes < 3; },
+      // 縮成 1 倍大小再存，檔案比較小
+      toDataURL: function () {
+        var c = document.createElement('canvas'); c.width = Math.round(w); c.height = Math.round(h);
+        var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+        x.drawImage(canvas, 0, 0, c.width, c.height);
+        return c.toDataURL('image/png');
+      },
+      demo: function () {   // 測試用：畫一個示意簽名
+        if (!w) size();
+        ctx.beginPath(); ctx.moveTo(30, 110);
+        [[60, 50], [80, 120], [105, 60], [125, 115], [150, 70], [175, 112], [210, 80], [250, 100], [300, 85]].forEach(function (q) { ctx.lineTo(q[0], q[1]); });
+        ctx.stroke(); strokes = 20;
+      },
+    };
+  }
+
   function store(k, v) {
     try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; }
   }
@@ -336,5 +453,6 @@
     t: t, lang: function () { return lang; }, setLang: setLang, call: call, errText: errText, DEMO: DEMO, EMBED: EMBED,
     store: store, forget: forget, esc: esc, loadScript: loadScript, link: link, fmtPhone: fmtPhone,
     getToken: getToken, setToken: setToken, deviceLabel: deviceLabel, dialog: dialog, demoBar: demoBar, toast: toast, gradeLabel: gradeLabel,
+    relationLabel: relationLabel, relationOptions: relationOptions, programLabel: programLabel, RELEASE_HTML: RELEASE_HTML, signaturePad: signaturePad,
   };
 })();

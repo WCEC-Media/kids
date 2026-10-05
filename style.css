@@ -36,7 +36,7 @@ h2 { font-size: 24px; margin: 0 0 12px; }
 label.f { display: block; font-weight: 700; margin: 18px 0 6px; }
 label.f .req { color: var(--err); font-weight: 600; font-size: 16px; margin-left: 6px; }
 .hint { color: var(--muted); font-size: 17px; margin: 4px 0 0; font-weight: 500; }
-input[type=text], input[type=tel], input[type=email], input[type=password], select, textarea {
+input[type=text], input[type=tel], input[type=email], input[type=password], input[type=date], select, textarea {
   width: 100%; font: inherit; color: var(--ink); background: var(--card);
   border: 2px solid var(--line); border-radius: 12px; padding: 14px 14px; min-height: 58px;
 }
@@ -149,3 +149,33 @@ input.code { text-align: center; font-size: 30px; letter-spacing: .3em; font-fam
 .ekid .nm { font-size: 23px; font-weight: 800; }
 .ekid .meta { color: var(--muted); margin-top: 2px; }
 .ekid label.f { margin-top: 10px; }
+
+/* ── 報名表 4 步驟 ── */
+.steps { display: flex; gap: 6px; margin: 14px 0 6px; }
+.steps i { flex: 1; height: 6px; border-radius: 3px; background: var(--line); }
+.steps i.on { background: var(--brand); }
+.stepname { font-size: 16px; color: var(--muted); margin-bottom: 4px; }
+.lead { color: var(--muted); font-size: 17px; margin: 0 0 8px; }
+.opt { color: var(--muted); font-size: 15px; margin-left: 6px; font-weight: 500; }
+.row > .s { flex: 0 1 110px; }
+.choices { display: grid; gap: 10px; margin-top: 8px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.choice { display: flex; gap: 14px; align-items: flex-start; border: 2px solid var(--line); border-radius: 14px; padding: 14px 16px; cursor: pointer; background: var(--card); }
+.choice input { width: 28px; height: 28px; flex: 0 0 28px; margin: 1px 0 0; accent-color: var(--brand); }
+.choice:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.choice b { display: block; }
+.choice .d { color: var(--muted); font-size: 16px; }
+.kidcard { border-left: 6px solid var(--gold); }
+.legal { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font-size: 16px; line-height: 1.6; }
+.legal p { margin: 0 0 10px; } .legal p:last-child { margin: 0; }
+.pad { display: block; width: 100%; height: 170px; margin-top: 10px; border: 2px dashed var(--line); border-radius: 12px; background: #fff; touch-action: none; cursor: crosshair; }
+.sigline { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 16px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 8px; }
+dl.sum { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0; font-size: 17px; }
+dl.sum dt { color: var(--muted); } dl.sum dd { margin: 0; font-weight: 700; }
+.navbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border-top: 1px solid var(--line); padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+.navbar .in { max-width: 688px; margin: 0 auto; display: flex; gap: 12px; }
+.navbar .btn { flex: 1; } .navbar .btn.ghost { flex: 0 0 120px; }
+.has-navbar .wrap { padding-bottom: 120px; }
+.headrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.headrow h3 { margin: 0; font-size: 20px; }

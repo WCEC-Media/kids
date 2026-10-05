@@ -4,7 +4,7 @@
  * 資料存在這台電腦瀏覽器的 localStorage，正式上線後用不到這個資料夾。
  */
 (function () {
-  var KEY = 'wcec_demo_gas_v3';
+  var KEY = 'wcec_demo_gas_v4';
   var here = document.currentScript ? document.currentScript.src : location.href;
   var CODE_URL = new URL('Code.gs', here).href;
   var WEB_BASE = new URL('../', here).href;
@@ -82,6 +82,22 @@
     state.outbox.unshift({ to: o.to, subject: o.subject, html: o.htmlBody || '', text: o.body || '', time: new Date() });
   } };
 
+  // ── 模擬 DriveApp：簽名圖片存在 state.files ──
+  function Folder(id) {
+    return {
+      getId: function () { return id; },
+      createFile: function (blob) {
+        var fid = 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        state.files[fid] = { name: blob.name, url: 'data:' + blob.type + ';base64,' + blob.data };
+        return { getUrl: function () { return 'demo-file:' + fid; } };
+      },
+    };
+  }
+  window.DriveApp = {
+    createFolder: function () { return Folder('demo-folder'); },
+    getFolderById: function (id) { return Folder(id); },
+  };
+
   // ── 模擬 Utilities ──
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function sha256(bytes) {
@@ -118,6 +134,8 @@
       if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
       return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
     },
+    base64Decode: function (b64) { return b64; },
+    newBlob: function (data, type, name) { return { data: data, type: type, name: name }; },
     computeDigest: function (alg, s) { return sha256(Array.from(new TextEncoder().encode(String(s)))); },
     base64EncodeWebSafe: function (bytes) {
       return btoa(String.fromCharCode.apply(null, bytes.map(function (b) { return b & 255; }))).replace(/\+/g, '-').replace(/\//g, '_');
@@ -133,7 +151,7 @@
 
   // ── 示範用的初始資料 ──
   function seed() {
-    state = { sheets: {}, order: [], cache: {}, outbox: [] };
+    state = { sheets: {}, order: [], cache: {}, outbox: [], files: {} };
     api.setup();
     var set = state.sheets['設定'];
     set.forEach(function (r) {
@@ -141,23 +159,31 @@
       if (r[0] === '網站網址') r[1] = WEB_BASE;
     });
     var now = new Date();
-    var F = state.sheets['家庭'], K = state.sheets['孩子'], E = state.sheets['報名'];
-    // 陳家：去年兩個孩子都有報，今年還沒續報（試續報、只報一個）
-    F.push(['F1', now, 'Daniel', 'Chen', '3025551234', '1234', 'daniel.chen@gmail.com', '', 'Mary Chen', '3025550001', '', 'WCECF-DEMO1', '']);
-    K.push(['C1', 'F1', 'Annie', 'Chen', '', now, '有效', '', '']);
-    K.push(['C2', 'F1', 'Leo', 'Chen', 'Peanut allergy', now, '有效', '', '']);
-    E.push(['2025-26', 'C1', 'F1', 'Annie Chen', 'K', 'Sparks', now, '有效', '']);
-    E.push(['2025-26', 'C2', 'F1', 'Leo Chen', '3', 'T&T', now, '有效', '']);
+    var F = state.sheets['家庭'], K = state.sheets['孩子'], E = state.sheets['報名'], R = state.sheets['同意書'];
+    // 欄位順序：家庭編號 建立時間 First Last 關係 手機 末四碼 Email 其他Email 住址 City State ZIP
+    //           第二家長First Last 關係 手機 緊急聯絡人 關係 電話 其他接送人 願意服事 QR 備註
+    // 陳家：去年兩個孩子都有報 Awana，今年還沒續報（試續報、只報一個）
+    F.push(['F1', now, 'Daniel', 'Chen', '父親', '3025551234', '1234', 'daniel.chen@gmail.com', '', '12 Main St', 'Hockessin', 'DE', '19707',
+            'Lily', 'Chen', '母親', '3025551235', 'Mary Chen', '祖父母', '3025550001', '', '', 'WCECF-DEMO1', '']);
+    K.push(['C1', 'F1', 'Annie', 'Chen', '2019-05-12', '', now, '有效', '', '']);
+    K.push(['C2', 'F1', 'Leo', 'Chen', '2016-09-03', 'Peanut allergy', now, '有效', '', '']);
+    E.push(['2025-26', 'Awana', 'C1', 'F1', 'Annie Chen', 'K', 'Sparks', now, '有效', '']);
+    E.push(['2025-26', 'Awana', 'C2', 'F1', 'Leo Chen', '3', 'T&T', now, '有效', '']);
+    E.push(['2025-26', '主日學', 'C2', 'F1', 'Leo Chen', '3', '', now, '有效', '']);
+    R.push(['2025-26', 'F1', 'Daniel Chen', '', now, '紙本']);
     // 林家：今年已報名（試簽到：末四碼 9876）
-    F.push(['F2', now, 'Grace', 'Lin', '6105559876', '9876', 'grace.lin@yahoo.com', '', 'Tom Lin', '6105550002', '', 'WCECF-DEMO2', '']);
-    K.push(['C3', 'F2', 'Ella', 'Lin', '', now, '有效', '', '']);
-    E.push(['2026-27', 'C3', 'F2', 'Ella Lin', '3歲', 'Cubbies', now, '有效', '']);
+    F.push(['F2', now, 'Grace', 'Lin', '母親', '6105559876', '9876', 'grace.lin@yahoo.com', '', '', '', 'PA', '',
+            '', '', '', '', 'Tom Lin', '祖父母', '6105550002', '', 'Awana', 'WCECF-DEMO2', '']);
+    K.push(['C3', 'F2', 'Ella', 'Lin', '2022-11-20', '', now, '有效', '', '']);
+    E.push(['2026-27', 'Awana', 'C3', 'F2', 'Ella Lin', '3歲', 'Cubbies', now, '有效', '']);
+    R.push(['2026-27', 'F2', 'Grace Lin', '', now, '紙本']);
     // 李家：去年 5 年級的 Ethan 今年 6 年級；去年 6 年級的 Olivia 已經畢業
-    F.push(['F3', now, 'David', 'Lee', '4845551234', '1234', 'davidlee@outlook.com', '', 'Susan Lee', '4845550003', '', 'WCECF-DEMO3', '']);
-    K.push(['C4', 'F3', 'Ethan', 'Lee', '', now, '有效', '', '']);
-    K.push(['C5', 'F3', 'Olivia', 'Lee', '', now, '有效', '', '']);
-    E.push(['2025-26', 'C4', 'F3', 'Ethan Lee', '5', 'T&T', now, '有效', '']);
-    E.push(['2025-26', 'C5', 'F3', 'Olivia Lee', '6', 'T&T', now, '有效', '']);
+    F.push(['F3', now, 'David', 'Lee', '父親', '4845551234', '1234', 'davidlee@outlook.com', '', '', 'West Chester', 'PA', '19380',
+            '', '', '', '', 'Susan Lee', '親戚', '4845550003', '', '', 'WCECF-DEMO3', '']);
+    K.push(['C4', 'F3', 'Ethan', 'Lee', '2015-02-14', '', now, '有效', '', '']);
+    K.push(['C5', 'F3', 'Olivia', 'Lee', '2014-07-30', '', now, '有效', '', '']);
+    E.push(['2025-26', 'Awana', 'C4', 'F3', 'Ethan Lee', '5', 'T&T', now, '有效', '']);
+    E.push(['2025-26', 'Awana', 'C5', 'F3', 'Olivia Lee', '6', 'T&T', now, '有效', '']);
     save();
   }
 

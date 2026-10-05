@@ -3,11 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Awana 報名 | WCEC</title>
+<title>Awana／主日學報名 | WCEC</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="wrap" id="app" aria-live="polite"></div>
+<div class="navbar" id="navbar" hidden><div class="in">
+  <button class="btn ghost" type="button" id="prev"></button>
+  <button class="btn" type="button" id="next"></button>
+</div></div>
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
@@ -16,131 +20,173 @@
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
   var app = document.getElementById('app');
-  var cfg = null, result = null, sending = false, tried = false, topError = '', newAnyway = false;
-  var parent, kids, consent, honeypot;
-  resetForm();
+  var cfg = null, step = 0, tried = false, topError = '', busy = false, result = null, newAnyway = false;
+  var dupChecked = false, oldEmail = false, pad = null, honeypot = '';
+  var S;   // 表單資料
+  reset();
 
-  function resetForm() {
-    parent = { first: '', last: '', phone: '', email: '', emergencyName: '', emergencyPhone: '', pickup: '' };
-    kids = [newKid()]; consent = false; honeypot = ''; tried = false; topError = '';
+  function reset() {
+    S = {
+      kids: [newKid()],
+      parent: { first: '', last: '', relation: '', phone: '', email: '' },
+      address: { street: '', city: '', state: 'DE', zip: '' },
+      second: { first: '', last: '', relation: '', phone: '', email: '' },
+      pickups: [newPickup()],
+      volunteer: { awana: false, ss: false },
+    };
+    step = 0; tried = false; topError = ''; dupChecked = false; oldEmail = false; result = null;
   }
-  function newKid() { return { first: '', last: '', grade: '', notes: '' }; }
+  function newKid() { return { first: '', last: S && S.parent.last || (S && S.kids[0] && S.kids[0].last) || '', birthday: '', grade: '', awana: true, ss: false, notes: '' }; }
+  function newPickup() { return { first: '', last: '', relation: '', phone: '' }; }
   function digits(v) { return String(v || '').replace(/\D/g, ''); }
-  function clsOf(g) { var m = (cfg.grades || []).filter(function (x) { return x.grade === g; })[0]; return m ? m.cls : ''; }
+  function clsOf(g) { var m = cfg.grades.filter(function (x) { return x.grade === g; })[0]; return m ? m.cls : ''; }
+  function stepNames() { return [t('r_s1'), t('r_s2'), t('r_s3'), t('r_s4')]; }
 
-  // ─── 驗證 ───
+  // ─── 驗證（只檢查目前這一步）───
   function errors() {
     var e = {};
-    if (!parent.first.trim()) e['p.first'] = t('err_required');
-    if (!parent.last.trim()) e['p.last'] = t('err_required');
-    if (digits(parent.phone).length < 10) e['p.phone'] = t('err_phone');
-    if (!/^\S+@\S+\.\S+$/.test(parent.email.trim())) e['p.email'] = t('err_email');
-    if (!parent.emergencyName.trim()) e['p.emergencyName'] = t('err_required');
-    if (digits(parent.emergencyPhone).length < 10) e['p.emergencyPhone'] = t('err_phone');
-    kids.forEach(function (k, i) {
-      if (!k.first.trim()) e['k' + i + '.first'] = t('err_required');
-      if (!k.last.trim()) e['k' + i + '.last'] = t('err_required');
-      if (!k.grade) e['k' + i + '.grade'] = t('err_required');
+    if (step === 0) S.kids.forEach(function (k, i) {
+      if (!k.first.trim()) e['kids.' + i + '.first'] = t('err_required');
+      if (!k.last.trim()) e['kids.' + i + '.last'] = t('err_required');
+      if (!k.birthday) e['kids.' + i + '.birthday'] = t('err_bday');
+      if (!k.grade) e['kids.' + i + '.grade'] = t('err_required');
+      if (!k.awana && !k.ss) e['kids.' + i + '.programs'] = t('err_prog');
     });
-    if (!consent) e.consent = t('err_consent');
+    if (step === 1) {
+      var p = S.parent;
+      if (!p.first.trim()) e['parent.first'] = t('err_required');
+      if (!p.last.trim()) e['parent.last'] = t('err_required');
+      if (!p.relation) e['parent.relation'] = t('err_required');
+      if (digits(p.phone).length < 10) e['parent.phone'] = t('err_phone');
+      if (!/^\S+@\S+\.\S+$/.test(p.email.trim())) e['parent.email'] = t('err_email');
+      if (S.second.email && !/^\S+@\S+\.\S+$/.test(S.second.email.trim())) e['second.email'] = t('err_email');
+    }
+    if (step === 2) {
+      var k = S.pickups[0];
+      if (!k.first.trim()) e['pickups.0.first'] = t('err_required');
+      if (!k.last.trim()) e['pickups.0.last'] = t('err_required');
+      if (digits(k.phone).length < 10) e['pickups.0.phone'] = t('err_phone');
+    }
     return e;
   }
 
-  // ─── 畫面 ───
-  function field(id, label, value, opts) {
+  // ─── 畫面元件 ───
+  function field(path, label, opts) {
     opts = opts || {};
-    var err = tried && errors()[id];
-    var input = opts.textarea
-      ? '<textarea id="' + id + '" data-bind="' + id + '">' + esc(value) + '</textarea>'
-      : '<input id="' + id + '" data-bind="' + id + '" type="' + (opts.type || 'text') + '" value="' + esc(value) + '"' +
-        (opts.auto ? ' autocomplete="' + opts.auto + '"' : '') + (opts.type === 'tel' ? ' inputmode="tel"' : '') + '>';
-    return '<div class="' + (err ? 'bad' : '') + '">' +
-      '<label class="f" for="' + id + '">' + esc(label) + (opts.req ? '<span class="req">' + t('required') + '</span>' : '') + '</label>' +
-      input + (opts.hint ? '<p class="hint">' + esc(opts.hint) + '</p>' : '') +
-      '<div class="msg">' + esc(err || '') + '</div></div>';
+    var val = get(path), err = tried && errors()[path];
+    var input = opts.textarea ? '<textarea id="' + path + '" data-bind="' + path + '">' + esc(val) + '</textarea>'
+      : opts.select ? '<select id="' + path + '" data-bind="' + path + '">' + opts.select + '</select>'
+      : '<input id="' + path + '" data-bind="' + path + '" type="' + (opts.type || 'text') + '" value="' + esc(val) + '"' +
+        (opts.auto ? ' autocomplete="' + opts.auto + '"' : '') + (opts.type === 'tel' ? ' inputmode="tel"' : '') + (opts.mode ? ' inputmode="' + opts.mode + '"' : '') + '>';
+    return '<div class="' + (err ? 'bad' : '') + '"><label class="f" for="' + path + '">' + label +
+      (opts.req ? '<span class="req">' + t('required') + '</span>' : opts.opt ? '<span class="opt">' + t('optional') + '</span>' : '') + '</label>' +
+      input + (opts.hint ? '<p class="hint">' + opts.hint + '</p>' : '') + '<div class="msg">' + esc(err || '') + '</div></div>';
   }
+  function get(path) { return path.split('.').reduce(function (o, k) { return o == null ? '' : o[k]; }, S) || ''; }
+  function set(path, v) { var ks = path.split('.'), o = S; ks.slice(0, -1).forEach(function (k) { o = o[k]; }); o[ks[ks.length - 1]] = v; }
 
   function header() {
-    return '<header class="top"><div><h1>' + t('reg_title') + '</h1><p class="sub">' + t('reg_sub') +
-      (cfg && cfg.year ? ' · ' + esc(cfg.year) : '') + '</p></div>' +
+    return '<header class="top"><div><h1>' + t('r_title') + '</h1><p class="sub">' + t('reg_sub') + (cfg && cfg.year ? ' · ' + esc(cfg.year) : '') + '</p></div>' +
       '<button class="btn ghost small langbtn" id="lang" type="button">' + t('lang_btn') + '</button></header>' + W.demoBar();
   }
 
+  var steps = [
+    // 1. 孩子
+    function () {
+      var gradeOpts = function (sel) {
+        return '<option value="">' + t('choose') + '</option>' + cfg.grades.map(function (g) {
+          return '<option value="' + esc(g.grade) + '"' + (g.grade === sel ? ' selected' : '') + '>' + esc(W.gradeLabel(g.grade)) + ' · ' + esc(g.cls) + '</option>';
+        }).join('');
+      };
+      return '<h2>' + t('r_kids_h') + '</h2><p class="lead">' + t('r_kids_lead') + '</p>' + S.kids.map(function (k, i) {
+        var pe = tried && errors()['kids.' + i + '.programs'];
+        return '<div class="card kidcard"><div class="headrow"><h3>' + t('kid_n', { n: i + 1 }) + '</h3>' +
+          (S.kids.length > 1 ? '<button class="btn ghost small" type="button" data-rmkid="' + i + '">' + t('remove') + '</button>' : '') + '</div>' +
+          '<div class="row">' + field('kids.' + i + '.first', t('first'), { req: 1 }) + field('kids.' + i + '.last', t('last'), { req: 1 }) + '</div>' +
+          '<div class="row">' + field('kids.' + i + '.birthday', t('birthday'), { req: 1, type: 'date' }) +
+          field('kids.' + i + '.grade', t('grade_year', { year: esc(cfg.year) }), { req: 1, select: gradeOpts(k.grade) }) + '</div>' +
+          '<div class="' + (pe ? 'bad' : '') + '"><label class="f">' + t('programs') + '<span class="req">' + t('at_least_one') + '</span></label><div class="two">' +
+          '<label class="choice"><input type="checkbox" data-bind="kids.' + i + '.awana"' + (k.awana ? ' checked' : '') + '><span><b>Awana</b><span class="d">' + t('awana_d') + '</span></span></label>' +
+          '<label class="choice"><input type="checkbox" data-bind="kids.' + i + '.ss"' + (k.ss ? ' checked' : '') + '><span><b>' + t('ss') + '</b><span class="d">' + t('ss_d') + '</span></span></label></div>' +
+          '<div class="msg">' + esc(pe || '') + '</div></div>' +
+          field('kids.' + i + '.notes', t('notes'), { opt: 1, textarea: 1, hint: t('notes_hint') }) + '</div>';
+      }).join('') + (S.kids.length < 8 ? '<button class="btn ghost block" type="button" id="addKid">' + t('add_kid') + '</button>' : '');
+    },
+    // 2. 家長
+    function () {
+      return '<h2>' + t('r_parent_h') + '</h2><p class="lead">' + t('r_parent_lead') + '</p>' +
+        '<div class="card"><div class="row">' + field('parent.first', t('first'), { req: 1, auto: 'given-name' }) + field('parent.last', t('last'), { req: 1, auto: 'family-name' }) + '</div>' +
+        field('parent.relation', t('relation'), { req: 1, select: W.relationOptions(S.parent.relation, ['父親', '母親', '祖父母', '監護人', '其他']) }) +
+        '<div class="row">' + field('parent.phone', t('phone'), { req: 1, type: 'tel', auto: 'tel', hint: t('phone_hint') }) +
+        field('parent.email', t('email'), { req: 1, type: 'email', auto: 'email' }) + '</div></div>' +
+        '<div class="card"><h3 style="margin:0">' + t('address') + '<span class="opt">' + t('optional') + '</span></h3>' +
+        field('address.street', t('street'), { auto: 'address-line1' }) +
+        '<div class="row">' + field('address.city', t('city'), { auto: 'address-level2' }) +
+        '<div class="s">' + field('address.state', t('state'), { select: ['DE', 'PA', 'MD', 'NJ'].map(function (x) { return '<option' + (x === S.address.state ? ' selected' : '') + '>' + x + '</option>'; }).join('') }) + '</div>' +
+        '<div class="s">' + field('address.zip', t('zip'), { mode: 'numeric', auto: 'postal-code' }) + '</div></div></div>' +
+        '<div class="card"><h3 style="margin:0">' + t('second_h') + '<span class="opt">' + t('optional') + '</span></h3><p class="hint">' + t('second_hint') + '</p>' +
+        '<div class="row">' + field('second.first', t('first')) + field('second.last', t('last')) + '</div>' +
+        '<div class="row">' + field('second.relation', t('relation_short'), { select: W.relationOptions(S.second.relation, ['父親', '母親', '祖父母', '監護人', '其他']) }) +
+        field('second.phone', t('phone'), { type: 'tel' }) + '</div>' + field('second.email', t('email'), { type: 'email', opt: 1 }) + '</div>';
+    },
+    // 3. 接送人
+    function () {
+      return '<h2>' + t('pick_h') + '</h2><p class="lead">' + t('pick_lead') + '</p>' + S.pickups.map(function (p, i) {
+        return '<div class="card"><div class="headrow"><h3>' + (i === 0 ? t('pick_1') : t('pick_n', { n: i + 1 })) + '</h3>' +
+          (i > 0 ? '<button class="btn ghost small" type="button" data-rmpick="' + i + '">' + t('remove') + '</button>' : '') + '</div>' +
+          '<div class="row">' + field('pickups.' + i + '.first', t('first'), { req: i === 0 }) + field('pickups.' + i + '.last', t('last'), { req: i === 0 }) + '</div>' +
+          '<div class="row">' + field('pickups.' + i + '.relation', t('relation_short'), { select: W.relationOptions(p.relation, ['祖父母', '親戚', '朋友', '保母', '其他']) }) +
+          field('pickups.' + i + '.phone', t('phone'), { req: i === 0, type: 'tel' }) + '</div></div>';
+      }).join('') + (S.pickups.length < 3 ? '<button class="btn ghost block" type="button" id="addPick">' + t('add_pickup') + '</button>' : '');
+    },
+    // 4. 服事與同意書
+    function () {
+      var p = S.parent;
+      return '<h2>' + t('vol_h') + '</h2><p class="lead">' + t('vol_lead') + '</p><div class="choices">' +
+        '<label class="choice"><input type="checkbox" data-bind="volunteer.awana"' + (S.volunteer.awana ? ' checked' : '') + '><span><b>' + t('vol_awana') + '</b></span></label>' +
+        '<label class="choice"><input type="checkbox" data-bind="volunteer.ss"' + (S.volunteer.ss ? ' checked' : '') + '><span><b>' + t('vol_ss') + '</b></span></label></div>' +
+        '<h2 style="margin-top:28px">' + t('release_h') + '</h2><p class="lead">' + t('release_lead') + '</p><div class="legal">' + W.RELEASE_HTML + '</div>' +
+        '<div class="card" id="sigcard"><div class="headrow"><h3>' + t('sign_h') + '</h3><button class="btn ghost small" type="button" id="clearSig">' + t('sign_clear') + '</button></div>' +
+        '<p class="hint">' + t('sign_hint') + '</p><canvas id="pad" class="pad" aria-label="' + t('sign_h') + '"></canvas>' +
+        '<div class="sigline"><span>' + esc(p.first + ' ' + p.last) + '</span><span>Date: <b>' + new Date().toLocaleDateString('en-US') + '</b></span></div>' +
+        '<div class="msg" id="sigmsg"></div></div>' +
+        '<div class="card"><h3 style="margin:0 0 8px">' + t('sum_h') + '</h3><dl class="sum">' +
+        S.kids.map(function (k) {
+          var progs = [k.awana ? 'Awana' : '', k.ss ? t('ss') : ''].filter(String).join('、');
+          return '<dt>' + t('kids') + '</dt><dd>' + esc(k.first + ' ' + k.last) + '（' + esc(W.gradeLabel(k.grade)) + ' · ' + esc(progs) + '）</dd>';
+        }).join('') +
+        '<dt>' + t('p_parent') + '</dt><dd>' + esc(p.first + ' ' + p.last) + ' · ' + esc(W.fmtPhone(p.phone)) + '</dd>' +
+        '<dt>Email</dt><dd>' + esc(p.email) + '</dd>' +
+        '<dt>' + t('p_emergency') + '</dt><dd>' + esc(S.pickups[0].first + ' ' + S.pickups[0].last) + ' · ' + esc(W.fmtPhone(S.pickups[0].phone)) + '</dd></dl>' +
+        '<p style="margin:10px 0 0"><button class="btn linkbtn" type="button" data-go="0">' + t('edit_kids') + '</button> <button class="btn linkbtn" type="button" data-go="1">' + t('edit_parent') + '</button></p></div>' +
+        '<div class="hp" aria-hidden="true"><input tabindex="-1" autocomplete="off" id="website"></div>';
+    },
+  ];
+
   function render() {
-    if (!cfg) { app.innerHTML = header() + '<p class="center"><span class="spinner"></span></p>'; bindTop(); return; }
-    if (result) return renderDone();
-    if (!cfg.open) { app.innerHTML = header() + '<div class="card"><p>' + t('closed') + '</p></div>'; bindTop(); return; }
-
-    var gradeOpts = function (sel) {
-      return '<option value="">' + t('grade_pick') + '</option>' + cfg.grades.map(function (g) {
-        return '<option value="' + esc(g.grade) + '"' + (g.grade === sel ? ' selected' : '') + '>' + esc(W.gradeLabel(g.grade)) + '</option>';
-      }).join('');
-    };
-
+    var nb = document.getElementById('navbar');
     var html = header();
+    if (!cfg) { app.innerHTML = html + '<p class="center"><span class="spinner"></span></p>'; nb.hidden = true; bindTop(); return; }
+    if (result) { nb.hidden = true; document.body.classList.remove('has-navbar'); return renderDone(); }
+    if (!cfg.open) { app.innerHTML = html + '<div class="card"><p>' + t('closed') + '</p></div>'; nb.hidden = true; bindTop(); return; }
     if (W.getToken() && !newAnyway) {
-      app.innerHTML = html + '<section class="card"><p>' + t('reg_logged_in') + '</p>' +
-        '<a class="btn block" href="' + W.link('parent.html') + '">' + t('go_parent') + '</a><p></p>' +
+      nb.hidden = true;
+      app.innerHTML = html + '<section class="card"><p>' + t('reg_logged_in') + '</p><a class="btn block" href="' + W.link('parent.html') + '">' + t('go_parent') + '</a><p></p>' +
         '<button class="btn linkbtn block" id="anyway" type="button">' + t('reg_new_anyway') + '</button></section>';
-      bindTop();
-      document.getElementById('anyway').onclick = function () { newAnyway = true; render(); };
+      bindTop(); document.getElementById('anyway').onclick = function () { newAnyway = true; render(); };
       return;
     }
+    html += '<div class="steps">' + [0, 1, 2, 3].map(function (i) { return '<i class="' + (i <= step ? 'on' : '') + '"></i>'; }).join('') + '</div>' +
+      '<div class="stepname">' + t('r_step', { n: step + 1, name: stepNames()[step] }) + '</div>';
+    if (step === 0) html += '<div class="card row" style="align-items:center"><span>' + t('have_account') + '</span><a class="btn ghost small" style="flex:0 0 auto" href="' + W.link('parent.html') + '">' + t('go_parent') + '</a></div>';
     if (topError) html += '<div class="banner err" role="alert">' + esc(topError) + '</div>';
-    html += '<div class="card row" style="align-items:center"><span>' + t('have_account') + '</span>' +
-      '<a class="btn ghost small" style="flex:0 0 auto" href="' + W.link('parent.html') + '">' + t('go_parent') + '</a></div>';
-
-    html += '<form id="f" novalidate><section class="card"><h2>' + t('parent') + '</h2>' +
-      '<p class="hint">' + t('name_hint') + '</p><div class="row">' + field('p.first', t('first'), parent.first, { req: 1, auto: 'given-name' }) +
-      field('p.last', t('last'), parent.last, { req: 1, auto: 'family-name' }) + '</div>' +
-      field('p.phone', t('phone'), parent.phone, { req: 1, type: 'tel', auto: 'tel', hint: t('phone_hint') }) +
-      field('p.email', t('email'), parent.email, { req: 1, type: 'email', auto: 'email', hint: t('email_hint') }) +
-      '</section><section class="card"><h2>' + t('emergency') + '</h2>' +
-      field('p.emergencyName', t('emergency_name'), parent.emergencyName, { req: 1 }) +
-      field('p.emergencyPhone', t('emergency_phone'), parent.emergencyPhone, { req: 1, type: 'tel' }) +
-      field('p.pickup', t('pickup'), parent.pickup, { textarea: 1, hint: t('pickup_hint') }) +
-      '</section><section class="card"><h2>' + t('kids') + '</h2>';
-
-    kids.forEach(function (k, i) {
-      var gErr = tried && errors()['k' + i + '.grade'];
-      html += '<div class="kid"><div class="kid-head"><h3>' + t('kid_n', { n: i + 1 }) + '</h3>' +
-        (kids.length > 1 ? '<button type="button" class="btn ghost small" data-remove="' + i + '">' + t('remove') + '</button>' : '') + '</div>' +
-        '<div class="row">' + field('k' + i + '.first', t('first'), k.first, { req: 1 }) +
-        field('k' + i + '.last', t('last'), k.last, { req: 1 }) + '</div>' +
-        '<div class="' + (gErr ? 'bad' : '') + '"><label class="f" for="k' + i + '.grade">' + t('grade') + '<span class="req">' + t('required') + '</span></label>' +
-        '<select id="k' + i + '.grade" data-bind="k' + i + '.grade">' + gradeOpts(k.grade) + '</select>' +
-        (k.grade && clsOf(k.grade) ? '<span class="cls-tag">' + t('cls') + '：' + esc(clsOf(k.grade)) + '</span>' : '') +
-        '<div class="msg">' + esc(gErr || '') + '</div></div>' +
-        field('k' + i + '.notes', t('notes'), k.notes, { textarea: 1, hint: t('notes_hint') }) +
-        '</div>';
-    });
-
-    var cErr = tried && errors().consent;
-    html += (kids.length < 8 ? '<button type="button" class="btn ghost block" id="add">' + t('add_kid') + '</button>' : '') +
-      '</section><section class="card ' + (cErr ? 'bad' : '') + '">' +
-      '<label class="check"><input type="checkbox" id="consent"' + (consent ? ' checked' : '') + '><span>' + t('consent') + '</span></label>' +
-      '<div class="msg">' + esc(cErr || '') + '</div></section>' +
-      '<div class="hp" aria-hidden="true"><input tabindex="-1" autocomplete="off" id="website" value="' + esc(honeypot) + '"></div>' +
-      '<button class="btn block" type="submit"' + (sending ? ' disabled' : '') + '>' + (sending ? t(sending) : t('submit')) + '</button></form>';
-
+    html += steps[step]();
     app.innerHTML = html;
-    bindTop();
-    app.querySelectorAll('[data-bind]').forEach(function (el) {
-      el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', function () {
-        var key = el.getAttribute('data-bind'), v = el.value;
-        if (key[0] === 'p') parent[key.slice(2)] = v;
-        else { var m = key.match(/^k(\d+)\.(\w+)$/); kids[+m[1]][m[2]] = v; }
-        if (el.tagName === 'SELECT' || tried) render();
-      });
-    });
-    app.querySelectorAll('[data-remove]').forEach(function (b) {
-      b.onclick = function () { kids.splice(+b.getAttribute('data-remove'), 1); render(); };
-    });
-    var add = document.getElementById('add');
-    if (add) add.onclick = function () { kids.push(newKid()); render(); var el = document.getElementById('k' + (kids.length - 1) + '.first'); if (el) el.focus(); };
-    document.getElementById('consent').onchange = function (e) { consent = e.target.checked; if (tried) render(); };
-    document.getElementById('website').oninput = function (e) { honeypot = e.target.value; };
-    document.getElementById('f').onsubmit = submit;
+    nb.hidden = false; document.body.classList.add('has-navbar');
+    var prev = document.getElementById('prev'), next = document.getElementById('next');
+    prev.textContent = t('prev'); prev.style.visibility = step === 0 ? 'hidden' : 'visible';
+    next.textContent = busy ? t('sending') : step === 3 ? t('submit_reg') : t('next'); next.disabled = !!busy;
+    bindTop(); bindStep();
   }
 
   // 輸入中途重畫時把游標放回原處
@@ -148,7 +194,7 @@
   render = function () {
     var a = document.activeElement, id = a && a.id, pos = a && a.selectionStart;
     _render();
-    if (id) { var el = document.getElementById(id); if (el) { el.focus(); try { if (pos != null) el.setSelectionRange(pos, pos); } catch (e) {} } }
+    if (id && id !== 'next' && id !== 'prev') { var el = document.getElementById(id); if (el) { el.focus(); try { if (pos != null) el.setSelectionRange(pos, pos); } catch (e) {} } }
   };
 
   function bindTop() {
@@ -156,28 +202,58 @@
     if (b) b.onclick = function () { W.setLang(W.lang() === 'en' ? 'zh' : 'en'); render(); };
   }
 
-  // ─── 送出：先檢查是不是已經登記過 ───
-  function submit(ev) {
-    ev.preventDefault();
+  function bindStep() {
+    app.querySelectorAll('[data-bind]').forEach(function (el) {
+      var ev = el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input';
+      el.addEventListener(ev, function () {
+        var path = el.getAttribute('data-bind');
+        set(path, el.type === 'checkbox' ? el.checked : el.value);
+        if (/^(parent|kids\.\d+\.(first|last))/.test(path)) dupChecked = false;   // 姓名、電話、Email 改了就要重新檢查重複
+        if (tried || el.tagName === 'SELECT' || el.type === 'checkbox') { if (step !== 3) render(); }
+      });
+    });
+    app.querySelectorAll('[data-rmkid]').forEach(function (b) { b.onclick = function () { S.kids.splice(+b.getAttribute('data-rmkid'), 1); render(); }; });
+    app.querySelectorAll('[data-rmpick]').forEach(function (b) { b.onclick = function () { S.pickups.splice(+b.getAttribute('data-rmpick'), 1); render(); }; });
+    app.querySelectorAll('[data-go]').forEach(function (b) { b.onclick = function () { step = +b.getAttribute('data-go'); tried = false; render(); scrollTo(0, 0); }; });
+    var ak = document.getElementById('addKid');
+    if (ak) ak.onclick = function () { S.kids.push(newKid()); render(); var el = document.getElementById('kids.' + (S.kids.length - 1) + '.first'); if (el) el.focus(); };
+    var ap = document.getElementById('addPick');
+    if (ap) ap.onclick = function () { S.pickups.push(newPickup()); render(); };
+    if (step === 3) {
+      pad = W.signaturePad(document.getElementById('pad'));
+      document.getElementById('clearSig').onclick = function () { pad.clear(); };
+      document.getElementById('website').oninput = function (e) { honeypot = e.target.value; };
+    }
+  }
+
+  document.getElementById('prev').onclick = function () { if (step > 0) { step--; tried = false; topError = ''; render(); scrollTo(0, 0); } };
+  document.getElementById('next').onclick = function () {
     tried = true; topError = '';
     var e = errors();
     if (Object.keys(e).length) {
       topError = t('err_fix'); render();
-      var first = document.getElementById(Object.keys(e)[0]); if (first) { first.focus(); first.scrollIntoView({ block: 'center' }); }
+      var first = document.getElementById(Object.keys(e)[0].replace(/\.programs$/, '.awana')) || document.querySelector('.bad');
+      if (first) { first.scrollIntoView({ block: 'center' }); }
       return;
     }
-    sending = 'checking'; render();
-    W.call('precheck', { parent: { first: parent.first, last: parent.last, email: parent.email, phone: parent.phone },
-                         kids: kids.map(function (k) { return { first: k.first, last: k.last }; }) }).then(function (r) {
-      sending = false; render();
+    if (step === 1 && !dupChecked) return precheck();
+    if (step === 3) return submit();
+    step++; tried = false; render(); scrollTo(0, 0);
+  };
+
+  // ─── 第 2 步填完：檢查是不是已經登記過 ───
+  function precheck() {
+    busy = 'checking'; render();
+    W.call('precheck', { parent: S.parent, kids: S.kids.map(function (k) { return { first: k.first, last: k.last }; }) }).then(function (r) {
+      busy = false;
       if (!r.ok) { topError = W.errText(r.error); render(); return; }
-      if (r.match === 'strong') return askStrong(r);
-      if (r.match === 'possible') return askPossible(r);
-      sendRegistration({});
+      if (r.match === 'strong') { render(); return askStrong(r); }
+      if (r.match === 'possible') { render(); return askPossible(r); }
+      dupChecked = true; step++; tried = false; render(); scrollTo(0, 0);
     });
   }
+  function goOn() { dupChecked = true; step = 2; tried = false; render(); scrollTo(0, 0); }
 
-  // Email 或電話完全相同：一定是同一個家庭，不讓它再建立新家庭
   function askStrong(r) {
     var c = r.candidates[0];
     W.dialog({
@@ -189,83 +265,75 @@
       ],
     });
   }
-
-  // 家長或孩子同名：讓家長自己確認是不是他（只顯示遮住的 Email）
   function askPossible(r) {
     var body = '<p>' + t('dup_maybe_body') + '</p>' + r.candidates.map(function (c, i) {
       var why = c.reason.split('+').map(function (x) { return t('dup_reason_' + x); }).join('、');
-      return '<div class="cand"><span class="why">' + esc(why) + '</span><dl>' +
-        '<dt>' + t('dup_parent') + '</dt><dd>' + esc(c.parent) + '</dd>' +
+      return '<div class="cand"><span class="why">' + esc(why) + '</span><dl><dt>' + t('dup_parent') + '</dt><dd>' + esc(c.parent) + '</dd>' +
         '<dt>' + t('dup_email') + '</dt><dd>' + esc(c.masked || '—') + '</dd></dl>' +
         (c.masked ? '<button type="button" class="btn block" data-cand="' + i + '">' + t('dup_its_me') + '</button>' : '') + '</div>';
     }).join('');
-    var d = W.dialog({
-      title: t('dup_maybe_title'),
-      body: body,
-      actions: [
-        { label: t('dup_not_me'), kind: 'ghost', onClick: function () { sendRegistration({}); } },
-        { label: t('dup_old_email'), kind: 'link', onClick: function () { askOldEmail(); } },
-        { label: t('cancel'), kind: 'link' },
-      ],
-    });
-    d.el.querySelectorAll('[data-cand]').forEach(function (b) {
-      b.onclick = function () { startLogin(r.candidates[+b.getAttribute('data-cand')].ref, d.close); };
-    });
+    var d = W.dialog({ title: t('dup_maybe_title'), body: body, actions: [
+      { label: t('dup_not_me'), kind: 'ghost', onClick: function () { goOn(); } },
+      { label: t('dup_old_email'), kind: 'link', onClick: function () {
+        W.dialog({ title: t('dup_old_title'), body: '<p>' + t('dup_old_body') + '</p>', actions: [
+          { label: t('next'), onClick: function () { oldEmail = true; goOn(); } }, { label: t('cancel'), kind: 'ghost' }] });
+      } },
+      { label: t('cancel'), kind: 'link' },
+    ] });
+    d.el.querySelectorAll('[data-cand]').forEach(function (b) { b.onclick = function () { startLogin(r.candidates[+b.getAttribute('data-cand')].ref, d.close); }; });
   }
-
-  function askOldEmail() {
-    W.dialog({
-      title: t('dup_old_title'),
-      body: '<p>' + t('dup_old_body') + '</p>',
-      actions: [
-        { label: t('dup_old_go'), onClick: function () { sendRegistration({ oldEmail: true }); } },
-        { label: t('cancel'), kind: 'ghost' },
-      ],
-    });
-  }
-
-  // 寄確認信到原本的 Email，然後到家長專區等確認
   function startLogin(ref, close) {
     W.call('loginStart', { ref: ref, device: W.deviceLabel() }).then(function (r) {
       if (close) close();
-      if (!r.ok) { topError = W.errText(r.error); render(); window.scrollTo(0, 0); return; }
+      if (!r.ok) { topError = W.errText(r.error); render(); scrollTo(0, 0); return; }
       location.href = W.link('parent.html', { rid: r.rid, num: r.num, m: r.masked });
     });
   }
 
-  function sendRegistration(extra) {
-    sending = 'sending'; render();
-    W.call('register', Object.assign({ parent: parent, kids: kids, consent: consent, website: honeypot, device: W.deviceLabel() }, extra))
-      .then(function (r) {
-        sending = false;
-        if (r.ok) { result = r; if (r.token) W.setToken(r.token); window.scrollTo(0, 0); }
-        else topError = W.errText(r.error);
-        render();
-      });
+  // ─── 送出 ───
+  function submit() {
+    var msg = document.getElementById('sigmsg');
+    if (!pad || pad.isEmpty()) {
+      msg.textContent = t('sign_need'); msg.parentNode.classList.add('bad');
+      document.getElementById('sigcard').scrollIntoView({ block: 'center' });
+      return;
+    }
+    var sig = pad.toDataURL();
+    busy = 'sending';
+    var nx = document.getElementById('next'); nx.disabled = true; nx.textContent = t('sending');
+    W.call('register', {
+      parent: S.parent, address: S.address, second: S.second, pickups: S.pickups, volunteer: S.volunteer,
+      kids: S.kids, consent: true, signer: (S.parent.first + ' ' + S.parent.last).trim(), signature: sig,
+      oldEmail: oldEmail, website: honeypot, device: W.deviceLabel(),
+    }).then(function (r) {
+      busy = false;
+      if (r.ok) { result = r; if (r.token) W.setToken(r.token); scrollTo(0, 0); render(); return; }
+      nx.disabled = false; nx.textContent = t('submit_reg');
+      var b = document.createElement('div'); b.className = 'banner err'; b.setAttribute('role', 'alert'); b.textContent = W.errText(r.error);
+      app.insertBefore(b, app.querySelector('h2')); b.scrollIntoView({ block: 'center' });
+    });
   }
 
   function renderDone() {
     var r = result, html = header() + '<section class="card big-ok"><div class="icon" aria-hidden="true">✅</div><h2>' + t('ok_title') + '</h2>';
     if (r.kids.length) html += '<ul class="kids-done">' + r.kids.map(function (k) {
-      return '<li>' + esc(k.name) + (k.cls ? ' · <b>' + esc(k.cls) + '</b>' : '') + '</li>'; }).join('') + '</ul>';
+      return '<li>' + esc(k.name) + ' · <b>' + esc(k.programs.map(W.programLabel).join('、')) + '</b></li>'; }).join('') + '</ul>';
     else html += '<p>' + t('ok_none') + '</p>';
     if (r.token) {
-      html += '<p>' + t('ok_or', { last4: esc(r.last4) }) + '</p>' +
-        '<a class="btn block" href="' + W.link('parent.html') + '">' + t('ok_enter') + '</a><p class="hint">' + t('ok_enter_hint') + '</p>';
+      html += '<p>' + t('ok_or', { last4: esc(r.last4) }) + '</p><a class="btn block" href="' + W.link('parent.html') + '">' + t('ok_enter') + '</a><p class="hint">' + t('ok_enter_hint') + '</p>';
     } else if (r.dup) {
       html += '<p>' + t('ok_dup') + '</p><button class="btn block" id="dupLogin" type="button">' + t('dup_send', { email: esc(r.masked) }) + '</button>';
     }
     if (r.kids.length && !W.DEMO) html += '<p class="hint">' + t('ok_mail') + '</p>';
-    html += '<p></p><button class="btn ghost block" id="again" type="button">' + t('again') + '</button></section>';
-    app.innerHTML = html;
+    app.innerHTML = html + '</section>';
     bindTop();
-    document.getElementById('again').onclick = function () { result = null; resetForm(); render(); };
     var dl = document.getElementById('dupLogin');
     if (dl) dl.onclick = function () { dl.disabled = true; startLogin(r.ref); };
   }
 
   render();
   W.call('config').then(function (c) { cfg = c.ok ? c : { open: false, grades: [] }; render(); });
+  window.__demoSign = function () { if (pad) pad.demo(); };   // 自動測試用
 })();
 </script>
 </body>

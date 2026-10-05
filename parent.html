@@ -4,10 +4,138 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>家長專區 | WCEC</title>
-<link rel="stylesheet" href="style.css">
+<style>
+  /* 家長專區：iPhone 風格（系統字型、分組列表、44pt 點擊區、表單頁從下方滑出） */
+  :root {
+    --bg: #f2f2f7; --cell: #fff; --label: #000; --label2: rgba(60,60,67,.6); --label3: rgba(60,60,67,.3);
+    --sep: rgba(60,60,67,.18); --tint: #2c3e6b; --gold: #d4a24c; --green: #248a3d; --red: #d70015;
+    --fill: rgba(118,118,128,.12); --nav: rgba(242,242,247,.82);
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #000; --cell: #1c1c1e; --label: #fff; --label2: rgba(235,235,245,.6); --label3: rgba(235,235,245,.3);
+    --sep: rgba(84,84,88,.6); --tint: #8fa9e6; --gold: #e3b664; --green: #30d158; --red: #ff453a; --fill: rgba(118,118,128,.24); --nav: rgba(0,0,0,.75); } }
+  :root[data-theme="dark"] {
+    --bg: #000; --cell: #1c1c1e; --label: #fff; --label2: rgba(235,235,245,.6); --label3: rgba(235,235,245,.3);
+    --sep: rgba(84,84,88,.6); --tint: #8fa9e6; --gold: #e3b664; --green: #30d158; --red: #ff453a; --fill: rgba(118,118,128,.24); --nav: rgba(0,0,0,.75); }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--label);
+    font: 400 17px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "Noto Sans TC", system-ui, sans-serif; letter-spacing: -0.01em; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { background: none; border: 0; padding: 0; cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+  .nav { position: sticky; top: 0; z-index: 10; height: 44px; display: flex; align-items: center; justify-content: center; transition: background .2s; }
+  .nav.scrolled { background: var(--nav); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); box-shadow: 0 .5px 0 var(--sep); }
+  .nav .t { font-weight: 600; opacity: 0; transition: opacity .2s; }
+  .nav.scrolled .t { opacity: 1; }
+  .nav .r { position: absolute; right: 16px; color: var(--tint); min-height: 44px; }
+  .large { font-size: 34px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.15; margin: 2px 20px 2px; }
+  .sub { color: var(--label2); font-size: 15px; margin: 0 20px 14px; }
+  .embed .nav, .embed .large { display: none; }
+  .embed main { padding-top: 12px; }
+  main { max-width: 640px; margin: 0 auto; padding-bottom: 48px; }
+
+  .demo { margin: 0 16px 12px; background: #fff4d6; color: #5c4400; border-radius: 12px; padding: 10px 14px; font-size: 14px; }
+  .demo a { color: inherit; font-weight: 600; }
+  .banner { margin: 0 16px 12px; border-radius: 12px; padding: 12px 14px; font-size: 15px; background: color-mix(in srgb, var(--red) 12%, var(--cell)); color: var(--red); font-weight: 600; }
+
+  .gh { font-size: 13px; color: var(--label2); text-transform: uppercase; letter-spacing: .02em; margin: 26px 36px 7px; }
+  .gf { font-size: 13px; color: var(--label2); margin: 7px 36px 0; line-height: 1.4; }
+  .group { background: var(--cell); border-radius: 12px; margin: 0 16px; overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 11px 16px; position: relative; width: 100%; text-align: left; }
+  .row + .row::before { content: ""; position: absolute; top: 0; right: 0; left: 16px; border-top: .5px solid var(--sep); }
+  .row.ind + .row.ind::before { left: 68px; }
+  button.row:active, label.row:active { background: var(--fill); }
+  .grow { flex: 1; min-width: 0; }
+  .k { white-space: nowrap; flex: 0 0 auto; }
+  .k.grow { flex: 1; white-space: normal; }
+  .v { color: var(--label2); text-align: right; overflow-wrap: anywhere; }
+  .chev { width: 8px; height: 13px; flex: 0 0 8px; opacity: .35; }
+  .tint { color: var(--tint); } .red { color: var(--red); }
+  .center { justify-content: center; text-align: center; }
+  .row input, .row select { flex: 1; min-width: 0; border: 0; background: none; text-align: right; outline: none; padding: 0; }
+  .row select { appearance: none; -webkit-appearance: none; color: var(--label2); text-align-last: right; }
+  .row textarea { width: 100%; border: 0; background: none; outline: none; resize: vertical; min-height: 64px; padding: 0; }
+
+  .avatar { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 15px; color: #fff; }
+  .name { font-weight: 600; }
+  .meta { font-size: 15px; color: var(--label2); margin-top: 1px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; padding: 2px 8px; border-radius: 999px; margin-top: 4px; }
+  .badge.ok { color: var(--green); background: color-mix(in srgb, var(--green) 13%, transparent); }
+  .badge.no { color: var(--label2); background: var(--fill); }
+  .note { font-size: 13px; color: var(--label2); margin-top: 3px; }
+
+  .cta { margin: 0 16px; border-radius: 16px; padding: 18px; background: linear-gradient(135deg, #2c3e6b, #3e568f); color: #fff; }
+  .cta .eyebrow { font-size: 13px; font-weight: 600; color: #f1d39a; letter-spacing: .02em; }
+  .cta h2 { font-size: 22px; letter-spacing: -0.02em; margin: 4px 0 6px; line-height: 1.2; }
+  .cta p { margin: 0 0 14px; font-size: 15px; color: rgba(255,255,255,.88); }
+  .pill { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 50px; border-radius: 14px; font-weight: 600; }
+  .pill.light { background: #fff; color: #2c3e6b; }
+  .pill.fill { background: var(--tint); color: var(--cell); }
+  .pill[disabled] { opacity: .5; }
+  .pill:active { transform: scale(.97); }
+  .padx { margin: 0 16px; }
+
+  .pass { margin: 0 16px; border-radius: 16px; background: #fff; color: #1c2540; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.06); }
+  .pass .top { background: #2c3e6b; color: #fff; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; }
+  .pass .top span { font-size: 13px; opacity: .85; }
+  .pass .body { display: flex; gap: 18px; align-items: center; padding: 18px; }
+  .pass .qr { width: 124px; height: 124px; flex: 0 0 124px; }
+  .pass .qr img, .pass .qr canvas { width: 124px !important; height: 124px !important; }
+  .pass .lbl { font-size: 12px; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+  .pass .val { font-size: 28px; font-weight: 700; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+  .pass .fam { font-size: 17px; font-weight: 600; margin-bottom: 10px; }
+  .pass .foot { font-size: 13px; color: #6b7280; padding: 0 18px 16px; }
+
+  .bignum { font-size: 64px; font-weight: 700; letter-spacing: .08em; text-align: center; color: var(--tint); font-variant-numeric: tabular-nums; }
+  .spinner { width: 24px; height: 24px; border: 3px solid var(--fill); border-top-color: var(--tint); border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 表單頁 */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 20; }
+  .scrim.on { opacity: 1; pointer-events: auto; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 21; max-width: 640px; margin: 0 auto; height: calc(100% - 40px);
+    background: var(--bg); border-radius: 12px 12px 0 0; transform: translateY(105%); visibility: hidden;
+    transition: transform .45s cubic-bezier(.32,.72,0,1), visibility 0s .45s; display: flex; flex-direction: column; }
+  .sheet.on { transform: none; visibility: visible; transition: transform .45s cubic-bezier(.32,.72,0,1); }
+  .sheet .grab { width: 36px; height: 5px; border-radius: 3px; background: var(--label3); margin: 6px auto 0; }
+  .sheet .bar { min-height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; gap: 8px; }
+  .sheet .bar b { font-weight: 600; text-align: center; flex: 1; }
+  .sheet .bar button { color: var(--tint); min-width: 56px; min-height: 44px; }
+  .sheet .bar .done { font-weight: 600; text-align: right; }
+  .sheet .bar .done[disabled] { opacity: .4; }
+  .sheet .scroll { overflow: auto; flex: 1; padding-bottom: 48px; -webkit-overflow-scrolling: touch; }
+  @media (prefers-reduced-motion: reduce) { .sheet, .sheet.on { transition: opacity .2s; transform: none; } .sheet { opacity: 0; } .sheet.on { opacity: 1; } }
+
+  .check { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 50%; border: 1.5px solid var(--label3); display: grid; place-items: center; }
+  .check svg { width: 14px; height: 14px; opacity: 0; }
+  .row.on .check { background: var(--tint); border-color: var(--tint); } .row.on .check svg { opacity: 1; }
+  .legal { font-size: 14px; line-height: 1.5; color: var(--label); padding: 14px 16px; }
+  .legal p { margin: 0 0 8px; } .legal p:last-child { margin: 0; }
+  .pad { display: block; width: 100%; height: 150px; background: #fff; border: 1.5px dashed var(--label3); border-radius: 10px; touch-action: none; }
+  .sigline { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--label2); margin-top: 6px; }
+  .sigline button { min-height: 36px; }
+  .err { color: var(--red); font-size: 15px; font-weight: 600; margin: 10px 36px 0; }
+
+  /* 提示框（iOS alert） */
+  .alert-back { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,.35); display: grid; place-items: center; padding: 24px; }
+  .alert { width: 100%; max-width: 300px; background: color-mix(in srgb, var(--cell) 94%, transparent); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    border-radius: 14px; overflow: hidden; text-align: center; }
+  .alert .msg { padding: 18px 16px 16px; } .alert .msg b { display: block; font-size: 17px; margin-bottom: 4px; } .alert .msg span { font-size: 13px; }
+  .alert .btns { display: flex; border-top: .5px solid var(--sep); }
+  .alert .btns button { flex: 1; min-height: 44px; color: var(--tint); }
+  .alert .btns button + button { border-left: .5px solid var(--sep); }
+  .alert .btns .destructive { color: var(--red); font-weight: 600; }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: rgba(28,28,30,.92); color: #fff; padding: 12px 18px;
+    border-radius: 14px; font-size: 15px; font-weight: 600; z-index: 40; max-width: calc(100% - 32px); text-align: center; }
+</style>
 </head>
 <body>
-<div class="wrap" id="app" aria-live="polite"></div>
+<div class="nav" id="nav"><span class="t" id="navt"></span><button class="r" type="button" id="lang"></button></div>
+<main id="app" aria-live="polite"></main>
+<div class="scrim" id="scrim"></div>
+<section class="sheet" id="sheet" role="dialog" aria-modal="true"></section>
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
@@ -17,127 +145,119 @@
   var W = WCEC, t = W.t, esc = W.esc;
   var app = document.getElementById('app');
   var qs = new URLSearchParams(location.search);
-
-  var view = 'loading';            // loading | login | wait | home
-  var data = null;                 // 家庭資料
-  var err = '';
+  var view = 'loading', data = null, err = '', busy = false, pollTimer = null;
   var email = W.store('wcec_last_email') || '';
-  var wait = null;                 // { rid, num, masked }
-  var pollTimer = null, busy = false;
+  var wait = null;
+  var CHEV = '<svg class="chev" viewBox="0 0 8 13" aria-hidden="true"><path d="M1 1l5.5 5.5L1 12" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+  var CHECK = '<span class="check"><svg viewBox="0 0 14 14"><path d="M2 7.5l3 3 7-7" fill="none" stroke="#fff" stroke-width="2.2"/></svg></span>';
 
-  // 從報名頁過來，已經寄出確認信
   if (qs.get('rid')) {
     wait = { rid: qs.get('rid'), num: qs.get('num'), masked: qs.get('m') };
-    history.replaceState(null, '', W.link('parent.html'));   // 網址不留登入代號
+    history.replaceState(null, '', W.link('parent.html'));
   }
 
-  function go(v) { view = v; render(); }
+  // 導覽列：捲過大標題後變成毛玻璃＋小標題
+  var nav = document.getElementById('nav');
+  addEventListener('scroll', function () { nav.classList.toggle('scrolled', scrollY > 40); }, { passive: true });
+  document.getElementById('lang').onclick = function () { W.setLang(W.lang() === 'en' ? 'zh' : 'en'); render(); };
 
-  function header() {
-    return '<header class="top"><div><h1>' + t('pz_title') + '</h1><p class="sub">' + t('pz_sub') + '</p></div>' +
-      '<button class="btn ghost small langbtn" id="lang" type="button">' + t('lang_btn') + '</button></header>' + W.demoBar();
+  function go(v) { view = v; render(); }
+  function rowBtn(attrs, k, v) {
+    return '<button class="row" type="button" ' + attrs + '><span class="k grow">' + k + '</span><span class="v">' + v + '</span>' + CHEV + '</button>';
   }
 
   function render() {
     clearInterval(pollTimer);
-    var h = header();
-    if (err) h += '<div class="banner err" role="alert">' + esc(err) + '</div>';
+    document.getElementById('lang').textContent = t('lang_btn');
+    document.getElementById('navt').textContent = t('pz_title');
+    var h = '<h1 class="large">' + t('pz_title') + '</h1>';
+    h += view === 'home' && data ? '<p class="sub">' + esc(t('p_family_of', { name: data.family.name })) + '</p>' : '<p class="sub">' + t('pz_sub') + '</p>';
+    if (W.DEMO) h += '<div class="demo">' + t('demo') + ' · <a href="demo/index.html" target="_blank" rel="noopener">' + t('demo_tools') + '</a></div>';
+    if (err) h += '<div class="banner" role="alert">' + esc(err) + '</div>';
     h += views[view]();
     app.innerHTML = h;
-    var lb = document.getElementById('lang');
-    if (lb) lb.onclick = function () { W.setLang(W.lang() === 'en' ? 'zh' : 'en'); render(); };
     (binds[view] || function () {})();
   }
 
   var views = {
-    loading: function () { return '<p class="center" style="margin-top:48px"><span class="spinner"></span></p>'; },
+    loading: function () { return '<p style="text-align:center;margin-top:40px"><span class="spinner"></span></p>'; },
 
     login: function () {
-      return '<section class="card"><h2>' + t('pz_login_title') + '</h2><p>' + t('pz_login_hint') + '</p>' +
-        '<form id="lf" novalidate><label class="f" for="em">' + t('email') + '</label>' +
-        '<input id="em" type="email" autocomplete="email" inputmode="email" value="' + esc(email) + '">' +
-        '<p></p><button class="btn block" type="submit"' + (busy ? ' disabled' : '') + '>' + (busy ? t('pz_sending') : t('pz_send')) + '</button></form></section>' +
-        '<div class="divider">' + t('pz_first_time') + '</div>' +
-        '<a class="btn ghost block" href="' + W.link('register.html') + '">' + t('pz_register') + '</a>';
+      return '<div class="gh">' + t('pz_login_title') + '</div><form id="lf" novalidate><div class="group">' +
+        '<label class="row"><span class="k">Email</span><input id="em" type="email" autocomplete="email" inputmode="email" value="' + esc(email) + '" placeholder="name@example.com"></label></div>' +
+        '<p class="gf">' + t('pz_login_hint') + '</p><div class="padx" style="margin-top:18px"><button class="pill fill" type="submit"' + (busy ? ' disabled' : '') + '>' + (busy ? t('pz_sending') : t('pz_send')) + '</button></div></form>' +
+        '<div class="gh">' + t('pz_first_time') + '</div><div class="group"><a class="row tint" style="text-decoration:none" href="' + W.link('register.html') + '"><span class="grow">' + t('pz_register') + '</span>' + CHEV + '</a></div>';
     },
 
     wait: function () {
-      return '<section class="card center"><h2>' + t('pz_wait_title') + '</h2>' +
-        '<p>' + t('pz_wait_body', { email: '<b>' + esc(wait.masked) + '</b>' }) + '</p>' +
-        '<p>' + t('pz_wait_num') + '</p><div class="bignum" aria-label="' + esc(wait.num) + '">' + esc(wait.num) + '</div>' +
-        '<p><span class="spinner"></span></p><p class="hint">' + t('pz_wait_auto') + '</p></section>' +
-        '<section class="card"><form id="cf" novalidate><label class="f" for="code">' + t('pz_code_label') + '</label>' +
-        '<input id="code" class="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6">' +
-        '<p></p><button class="btn block" type="submit"' + (busy ? ' disabled' : '') + '>' + t('pz_code_btn') + '</button></form>' +
-        '<p class="hint">' + t('pz_spam') + '</p></section>' +
-        '<div class="row"><button class="btn ghost" id="resend" type="button">' + t('pz_resend') + '</button>' +
-        '<button class="btn ghost" id="other" type="button">' + t('pz_other_email') + '</button></div>';
+      return '<div class="gh">' + t('pz_wait_title') + '</div><div class="group"><div class="row" style="display:block;padding:18px 16px">' +
+        '<p style="margin:0 0 6px">' + t('pz_wait_body', { email: '<b>' + esc(wait.masked) + '</b>' }) + '</p>' +
+        '<p class="meta" style="margin:0">' + t('pz_wait_num') + '</p><div class="bignum">' + esc(wait.num) + '</div>' +
+        '<p style="text-align:center;margin:4px 0"><span class="spinner"></span></p><p class="meta" style="text-align:center;margin:0">' + t('pz_wait_auto') + '</p></div></div>' +
+        '<div class="gh">' + t('pz_code_label') + '</div><form id="cf" novalidate><div class="group">' +
+        '<label class="row"><span class="k">' + (W.lang() === 'en' ? 'Code' : '驗證碼') + '</span><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"></label>' +
+        '<button class="row tint center" type="submit"' + (busy ? ' disabled' : '') + '>' + t('pz_code_btn') + '</button></div></form>' +
+        '<p class="gf">' + t('pz_spam') + '</p>' +
+        '<div class="gh"></div><div class="group"><button class="row tint" type="button" id="resend">' + t('pz_resend') + '</button>' +
+        '<button class="row tint" type="button" id="other">' + t('pz_other_email') + '</button></div>';
     },
 
     home: function () {
-      var d = data, f = d.family;
-      var h = '<h2 style="margin-top:8px">' + t('pz_hello') + '</h2>';
-
-      // 開放報名時：還沒報今年的孩子，一鍵續報
-      var canEnroll = d.open && d.kids.some(function (k) { return k.eligible; });
-      if (canEnroll) {
-        h += '<section class="card enroll-cta"><h2>' + t('en_title', { year: esc(d.year) }) + '</h2><p>' + t('en_body') + '</p>' +
-          '<button class="btn block" type="button" id="enrollBtn">' + t('en_btn', { year: esc(d.year) }) + '</button></section>';
+      var d = data, f = d.family, h = '';
+      if (d.open && d.kids.some(function (k) { return k.eligible; })) {
+        h += '<section class="cta"><div class="eyebrow">AWANA · ' + esc(t('ss')).toUpperCase() + ' · ' + esc(d.year) + '</div>' +
+          '<h2>' + t('en_title', { year: esc(d.year) }) + '</h2><p>' + t('en_body') + '</p>' +
+          '<button class="pill light" type="button" id="enrollBtn">' + t('en_btn', { year: esc(d.year) }) + '</button></section>';
       }
-
-      // 孩子
-      h += '<div class="sec-head"><h2>' + t('pz_kids') + '</h2></div>';
-      if (!d.kids.length) h += '<p>' + t('pz_no_kids') + '</p>';
+      h += '<div class="gh">' + t('pz_kids') + '</div><div class="group">';
+      if (!d.kids.length) h += '<div class="row meta">' + t('p_none') + '</div>';
       d.kids.forEach(function (k, i) {
-        var status = k.enrolled
-          ? '<div class="st ok">✓ ' + t('st_enrolled', { year: esc(d.year) }) + '</div><div class="meta">' + esc(W.gradeLabel(k.grade)) + (k.cls ? ' · ' + esc(k.cls) : '') + '</div>'
-          : k.graduated ? '<div class="st">' + t('st_grad') + '</div>'
-          : '<div class="st no">' + t('st_not', { year: esc(d.year) }) + '</div>' +
-            (k.lastGrade ? '<div class="meta">' + t('en_last', { grade: esc(W.gradeLabel(k.lastGrade)) + '（' + esc(k.lastYear) + '）' }) + '</div>' : '');
-        h += '<div class="pkid' + (k.enrolled ? '' : ' off') + '"><div><div class="nm">' + esc(k.name) + '</div>' + status +
-          (k.notes ? '<div class="note">' + t('pz_notes') + '：' + esc(k.notes) + '</div>' : '') +
-          '</div><button class="btn ghost small" type="button" data-kid="' + i + '">' + t('pz_edit') + '</button></div>';
+        var st = k.enrolled
+          ? '<span class="badge ok">✓ ' + t('st_enrolled', { year: esc(d.year) }) + '</span><div class="meta">' + esc(W.gradeLabel(k.grade)) +
+            ' · ' + esc(k.programs.map(W.programLabel).join('、')) + '</div>'
+          : k.graduated ? '<span class="badge no">' + t('st_grad') + '</span>'
+          : '<span class="badge no">' + t('st_not', { year: esc(d.year) }) + '</span>' + (k.lastGrade ? '<div class="meta">' + esc(t('p_last', { grade: W.gradeLabel(k.lastGrade) })) + '</div>' : '');
+        h += '<button class="row ind" type="button" data-kid="' + i + '"><span class="avatar" style="background:' + color(k.name) + '">' + esc(initials(k)) + '</span>' +
+          '<span class="grow"><div class="name">' + esc(k.name) + '</div>' + st + (k.notes ? '<div class="note">' + t('pz_notes') + '：' + esc(k.notes) + '</div>' : '') + '</span>' + CHEV + '</button>';
       });
-      if (d.open) h += '<button class="btn ghost block" type="button" id="addKid">' + t('pz_add_kid') + '</button>';
-      else h += '<p class="hint">' + t('closed_short', { year: esc(d.year) }) + '</p>';
+      if (d.open) h += '<button class="row tint" type="button" id="addKid"><span style="width:40px;text-align:center;font-size:22px">＋</span><span class="grow">' + t('p_add_kid') + '</span></button>';
+      h += '</div>';
+      if (!d.open) h += '<p class="gf">' + t('p_closed', { year: esc(d.year) }) + '</p>';
 
-      // 家庭簽到卡
-      h += '<div class="sec-head"><h2>' + t('pz_card') + '</h2></div><section class="card center">' +
-        '<div class="qrbox"><div id="qr" aria-label="QR code"></div><div class="code">' + esc(f.qr) + '</div></div>' +
-        '<p>' + t('pz_card_hint', { last4: '<b>' + esc(f.last4) + '</b>' }) + '</p></section>';
+      h += '<div class="gh">' + t('pz_card') + '</div><div class="pass"><div class="top"><b>WCEC Awana</b><span>' + t('pz_card') + '</span></div>' +
+        '<div class="body"><div class="qr" id="qr"></div><div><div class="fam">' + esc(t('p_family_of', { name: f.name })) + '</div>' +
+        '<div class="lbl">' + (W.lang() === 'en' ? 'Last 4 of phone' : '手機末四碼') + '</div><div class="val">' + esc(f.last4) + '</div></div></div>' +
+        '<div class="foot">' + t('pz_card_hint', { last4: esc(f.last4) }) + '</div></div>';
 
-      // 聯絡資料
-      h += '<div class="sec-head"><h2>' + t('pz_contact') + '</h2><button class="btn ghost small" id="editFam" type="button">' + t('pz_edit') + '</button></div>' +
-        '<section class="card"><dl class="info">' +
-        row(t('parent_name'), f.name) + row(t('phone'), W.fmtPhone(f.phone)) + row(t('email'), f.email) +
-        row(t('emergency'), f.emergencyName) + row(t('emergency_phone'), W.fmtPhone(f.emergencyPhone)) +
-        (f.pickup ? row(t('pickup').replace(/（.*）|\(.*\)/, ''), f.pickup) : '') + '</dl></section>';
+      var a = f.address || {}, addr = [a.street, a.city, [a.state, a.zip].filter(String).join(' ')].filter(String).join(', ');
+      var sp = f.second || {}, em = f.pickups[0] || {};
+      h += '<div class="gh">' + t('pz_contact') + '</div><div class="group">' +
+        rowBtn('data-contact', t('p_parent'), esc(f.name) + (f.relation ? '<br>' + esc(W.relationLabel(f.relation)) : '')) +
+        rowBtn('data-contact', t('p_phone'), esc(W.fmtPhone(f.phone))) +
+        rowBtn('data-contact', t('p_address'), esc(addr || '—')) +
+        rowBtn('data-contact', t('p_second'), sp.first ? esc(sp.first + ' ' + sp.last) + '<br>' + esc(W.fmtPhone(sp.phone)) : '—') +
+        rowBtn('data-contact', t('p_emergency'), em.first ? esc(em.first + ' ' + em.last) + '<br>' + esc(W.fmtPhone(em.phone)) : '—') +
+        rowBtn('data-contact', t('p_pickups'), f.pickups.length > 1 ? f.pickups.slice(1).map(function (p) { return esc(p.first + ' ' + p.last); }).join('<br>') : '—') +
+        '</div>';
 
-      // 可以登入的家長
-      h += '<div class="sec-head"><h2>' + t('pz_parents') + '</h2></div><section class="card"><ul class="parents">' +
-        parentLi(f.email, true) + f.others.map(function (e) { return parentLi(e, false); }).join('') + '</ul>' +
-        '<p></p><button class="btn ghost block" id="invite" type="button">' + t('pz_invite') + '</button>' +
-        '<p class="hint">' + t('pz_main_note') + '</p></section>';
-
-      h += '<p></p><button class="btn ghost block" id="logout" type="button">' + t('pz_logout') + '</button>' +
-        '<p class="hint center">' + t('pz_staff_note') + '</p>';
+      h += '<div class="gh">' + t('pz_parents') + '</div><div class="group">' +
+        '<div class="row"><span class="grow"><div style="overflow-wrap:anywhere">' + esc(f.email) + '</div><div class="meta">' + (f.email === d.me ? t('p_main_you') : t('p_main')) + '</div></span></div>' +
+        f.others.map(function (e) {
+          return '<div class="row"><span class="grow"><div style="overflow-wrap:anywhere">' + esc(e) + '</div>' + (e === d.me ? '<div class="meta">' + t('p_you') + '</div>' : '') + '</span>' +
+            (e !== d.me ? '<button class="red" type="button" data-rm="' + esc(e) + '" style="min-height:44px">' + t('pz_remove') + '</button>' : '') + '</div>';
+        }).join('') +
+        '<button class="row tint" type="button" id="invite">' + t('p_invite') + '</button></div><p class="gf">' + t('pz_main_note') + '</p>' +
+        '<div class="gh"></div><div class="group"><button class="row red center" type="button" id="logout">' + t('p_signout') + '</button></div>' +
+        '<p class="gf" style="text-align:center;margin-top:14px">' + t('pz_staff_note') + '</p>';
       return h;
-
-      function row(k, v) { return '<dt>' + esc(k) + '</dt><dd>' + esc(v || '—') + '</dd>'; }
-      function parentLi(e, main) {
-        var tags = [main ? t('pz_main') : '', e === d.me ? t('pz_you') : ''].filter(String).join('・');
-        return '<li><div><div class="em">' + esc(e) + '</div>' + (tags ? '<div class="tag">' + esc(tags) + '</div>' : '') + '</div>' +
-          (!main && e !== d.me ? '<button class="btn ghost small" type="button" data-rm="' + esc(e) + '">' + t('pz_remove') + '</button>' : '') + '</li>';
-      }
     },
   };
 
   var binds = {
     login: function () {
-      var inp = document.getElementById('em');
       document.getElementById('lf').onsubmit = function (e) {
         e.preventDefault();
-        email = inp.value.trim();
+        email = document.getElementById('em').value.trim();
         if (!/^\S+@\S+\.\S+$/.test(email)) { err = t('err_email'); render(); return; }
         W.store('wcec_last_email', email);
         busy = true; err = ''; render();
@@ -149,7 +269,6 @@
         });
       };
     },
-
     wait: function () {
       pollTimer = setInterval(poll, 3000);
       document.getElementById('cf').onsubmit = function (e) {
@@ -165,34 +284,42 @@
         });
       };
       document.getElementById('resend').onclick = function () {
-        if (wait.email) { email = wait.email; }
-        wait = null; err = '';
-        if (email) { go('login'); document.getElementById('lf').requestSubmit(); } else go('login');
+        if (wait.email) email = wait.email;
+        wait = null; err = ''; go('login');
+        if (email) document.getElementById('lf').requestSubmit();
       };
       document.getElementById('other').onclick = function () { wait = null; err = ''; email = ''; go('login'); };
     },
-
     home: function () {
       W.loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js').then(function () {
         var el = document.getElementById('qr');
-        if (el && !el.hasChildNodes()) new QRCode(el, { text: data.family.qr, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+        if (el && !el.hasChildNodes()) new QRCode(el, { text: data.family.qr, width: 248, height: 248, correctLevel: QRCode.CorrectLevel.M });
       }).catch(function () {});
-      app.querySelectorAll('[data-kid]').forEach(function (b) { b.onclick = function () { kidDialog(data.kids[+b.getAttribute('data-kid')]); }; });
-      var eb = document.getElementById('enrollBtn');
-      if (eb) eb.onclick = enrollDialog;
-      app.querySelectorAll('[data-rm]').forEach(function (b) { b.onclick = function () { removeDialog(b.getAttribute('data-rm')); }; });
-      var ak = document.getElementById('addKid');
-      if (ak) ak.onclick = function () { kidDialog(null); };
-      document.getElementById('editFam').onclick = function () { familyDialog(); };
-      document.getElementById('invite').onclick = inviteDialog;
+      var eb = document.getElementById('enrollBtn'); if (eb) eb.onclick = enrollSheet;
+      var ak = document.getElementById('addKid'); if (ak) ak.onclick = function () { kidSheet(null); };
+      app.querySelectorAll('[data-kid]').forEach(function (b) { b.onclick = function () { kidSheet(data.kids[+b.getAttribute('data-kid')]); }; });
+      app.querySelectorAll('[data-contact]').forEach(function (b) { b.onclick = function () { contactSheet(); }; });
+      app.querySelectorAll('[data-rm]').forEach(function (b) {
+        b.onclick = function () {
+          var e = b.getAttribute('data-rm');
+          alertBox(t('pz_remove'), t('pz_remove_q', { email: e }), t('pz_remove'), function () { act('removeParent', { email: e }); });
+        };
+      });
+      document.getElementById('invite').onclick = inviteSheet;
       document.getElementById('logout').onclick = function () {
-        W.dialog({ title: t('pz_logout'), body: '<p>' + t('pz_logout_q') + '</p>', actions: [
-          { label: t('pz_logout_yes'), onClick: function () { W.call('logout', { token: W.getToken() }); W.setToken(''); data = null; go('login'); } },
-          { label: t('cancel'), kind: 'ghost' },
-        ] });
+        alertBox(t('p_signout'), t('pz_logout_q'), t('pz_logout_yes'), function () {
+          W.call('logout', { token: W.getToken() }); W.setToken(''); data = null; go('login');
+        });
       };
     },
   };
+
+  function initials(k) { return ((k.first || '').charAt(0) + (k.last || '').charAt(0)).toUpperCase(); }
+  function color(s) {
+    var c = ['#d4a24c', '#6b8ac9', '#4f9d7e', '#b5739d', '#d0805a', '#7b7fd1'], h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return c[h % c.length];
+  }
 
   // ─── 登入 ───
   function poll() {
@@ -203,190 +330,255 @@
       else if (!r.ok && r.error === 'expired') { wait = null; err = t('e_expired'); go('login'); }
     });
   }
-  // 家長從信箱 App 切回來時，馬上檢查一次
   document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
-
-  function signedIn(token) {
-    W.setToken(token); wait = null; err = '';
-    loadMe();
-  }
-
+  function signedIn(token) { W.setToken(token); wait = null; err = ''; loadMe(); }
   function loadMe() {
     if (!W.getToken()) { go(wait ? 'wait' : 'login'); return; }
     view = 'loading'; render();
     W.call('me', { token: W.getToken() }).then(function (r) {
       if (r.ok) { data = r.data; go('home'); return; }
-      if (r.error === 'auth') { W.setToken(''); err = t('e_auth'); go('login'); return; }
-      err = W.errText(r.error); go('login');
+      W.setToken(''); err = r.error === 'auth' ? t('e_auth') : W.errText(r.error); go('login');
     });
   }
 
-  // ─── 對話框：修改資料 ───
-  function gradeLabel(g) { return W.gradeLabel(g); }
-
-  function inputField(id, label, val, opts) {
+  // ─── 表單頁 ───
+  var sheet = document.getElementById('sheet'), scrim = document.getElementById('scrim');
+  function openSheet(o) {
+    sheet.innerHTML = '<div class="grab"></div><div class="bar"><button type="button" data-x>' + t('p_cancel') + '</button><b>' + esc(o.title) + '</b>' +
+      '<button type="button" class="done" data-save>' + esc(o.save || t('p_save')) + '</button></div><div class="scroll"><div class="err" data-err hidden></div>' + o.body + '</div>';
+    sheet.classList.add('on'); scrim.classList.add('on'); document.body.style.overflow = 'hidden';
+    sheet.querySelector('[data-x]').onclick = closeSheet;
+    sheet.querySelector('[data-save]').onclick = function () { o.onSave(sheet); };
+    sheet.querySelectorAll('[data-bigsave]').forEach(function (b) { b.onclick = function () { o.onSave(sheet); }; });
+    if (o.onOpen) setTimeout(function () { o.onOpen(sheet); }, 0);
+  }
+  function closeSheet() { sheet.classList.remove('on'); scrim.classList.remove('on'); document.body.style.overflow = ''; }
+  scrim.onclick = closeSheet;
+  function sheetErr(msg) { var e = sheet.querySelector('[data-err]'); e.textContent = msg; e.hidden = false; sheet.querySelector('.scroll').scrollTop = 0; }
+  function busySave(on) {
+    sheet.querySelectorAll('[data-save],[data-bigsave]').forEach(function (b) {
+      b.disabled = on;
+      if (b.hasAttribute('data-bigsave')) { if (on) { b.dataset.label = b.textContent; b.textContent = t('pz_saving'); } else if (b.dataset.label) b.textContent = b.dataset.label; }
+    });
+  }
+  function val(id) { var el = sheet.querySelector('#' + id); return el ? el.value.trim() : ''; }
+  function inRow(id, label, value, opts) {
     opts = opts || {};
-    return '<label class="f" for="' + id + '">' + esc(label) + (opts.req ? '<span class="req">' + t('required') + '</span>' : '') + '</label>' +
-      (opts.textarea ? '<textarea id="' + id + '">' + esc(val) + '</textarea>'
-        : '<input id="' + id + '" type="' + (opts.type || 'text') + '"' + (opts.type === 'tel' ? ' inputmode="tel"' : '') + ' value="' + esc(val) + '">') +
-      (opts.hint ? '<p class="hint">' + esc(opts.hint) + '</p>' : '');
+    return '<label class="row"><span class="k">' + esc(label) + '</span>' + (opts.select
+      ? '<select id="' + id + '">' + opts.select + '</select>' + CHEV
+      : '<input id="' + id + '" type="' + (opts.type || 'text') + '" value="' + esc(value || '') + '"' + (opts.type === 'tel' ? ' inputmode="tel"' : '') + ' placeholder="' + esc(opts.ph || '') + '">') + '</label>';
   }
-  function val(el, id) { return el.querySelector('#' + id).value.trim(); }
-  function showErr(el, msg) {
-    var b = el.querySelector('.dlg-err');
-    if (!b) { b = document.createElement('div'); b.className = 'banner err dlg-err'; b.setAttribute('role', 'alert'); el.querySelector('.dlg-body').prepend(b); }
-    b.textContent = msg; b.scrollIntoView({ block: 'nearest' });
+  function gradeOpts(sel) {
+    return '<option value="">' + t('choose') + '</option>' + data.grades.map(function (g) {
+      return '<option value="' + esc(g.grade) + '"' + (g.grade === sel ? ' selected' : '') + '>' + esc(W.gradeLabel(g.grade)) + ' · ' + esc(g.cls) + '</option>';
+    }).join('');
+  }
+  function toggleRow(attr, label, on, sub) {
+    return '<button class="row' + (on ? ' on' : '') + '" type="button" ' + attr + ' aria-pressed="' + on + '">' + CHECK +
+      '<span class="grow">' + esc(label) + (sub ? '<div class="meta">' + esc(sub) + '</div>' : '') + '</span></button>';
+  }
+  function bindToggles(el) {
+    el.querySelectorAll('[data-toggle]').forEach(function (b) {
+      b.onclick = function () { b.classList.toggle('on'); b.setAttribute('aria-pressed', b.classList.contains('on')); if (b.onToggle) b.onToggle(); };
+    });
+  }
+  function isOn(el, sel) { var b = el.querySelector(sel); return !!(b && b.classList.contains('on')); }
+
+  // 今年還沒簽同意書時，表單最下面加上同意書和簽名
+  function releaseBlock() {
+    if (data.signed) return '<p class="gf" style="margin-top:20px">✓ ' + t('p_signed') + '</p>';
+    return '<div class="gh">' + esc(t('p_sign_title', { year: data.year })) + '</div><div class="group"><div class="legal">' + W.RELEASE_HTML + '</div>' +
+      '<div class="row" style="display:block"><canvas class="pad" id="pad" aria-label="' + t('sign_h') + '"></canvas>' +
+      '<div class="sigline"><span>' + esc(data.family.name) + ' · ' + new Date().toLocaleDateString('en-US') + '</span><button type="button" class="tint" id="clearSig">' + t('sign_clear') + '</button></div></div></div>' +
+      '<p class="gf">' + t('sign_hint') + '</p>';
+  }
+  var pad = null;
+  function setupPad(el) {
+    pad = null;
+    var c = el.querySelector('#pad');
+    if (!c) return;
+    pad = W.signaturePad(c);
+    el.querySelector('#clearSig').onclick = function () { pad.clear(); };
+  }
+  function sigPayload() {
+    if (data.signed) return {};
+    if (!pad || pad.isEmpty()) return null;
+    return { signer: data.family.name, signature: pad.toDataURL() };
   }
 
-  // 送出修改：成功就關掉對話框並更新畫面
-  function save(action, payload, close, el, okMsg, after) {
-    var btn = el.querySelector('.dlg-actions .btn');
-    btn.disabled = true; btn.textContent = t('pz_saving');
-    W.call(action, Object.assign({ token: W.getToken() }, payload)).then(function (r) {
-      if (r.ok) { data = r.data; close(); render(); W.toast(okMsg || t('pz_saved')); if (typeof after === 'function') after(); return; }
-      btn.disabled = false; btn.textContent = t('pz_save');
-      if (r.error === 'auth') { close(); W.setToken(''); err = t('e_auth'); go('login'); return; }
-      showErr(el, r.error === 'invalid' ? t('err_fix') : W.errText(r.error));
+  function act(action, payload, okMsg, after) {
+    busySave(true);
+    return W.call(action, Object.assign({ token: W.getToken() }, payload)).then(function (r) {
+      busySave(false);
+      if (r.ok) { data = r.data; closeSheet(); render(); if (okMsg !== false) W.toast(okMsg || t('pz_saved')); if (after) after(r); return r; }
+      if (r.error === 'auth') { closeSheet(); W.setToken(''); err = t('e_auth'); go('login'); return r; }
+      sheetErr(r.error === 'invalid' ? t('err_fix') : W.errText(r.error));
+      return r;
     });
   }
 
-  function gradeSelect(id, sel) {
-    return '<select id="' + id + '"><option value="">' + t('grade_pick') + '</option>' + data.grades.map(function (x) {
-      return '<option value="' + esc(x.grade) + '"' + (x.grade === sel ? ' selected' : '') + '>' + esc(gradeLabel(x.grade)) + ' · ' + esc(x.cls) + '</option>';
-    }).join('') + '</select>';
-  }
-
-  // 續報：勾選今年要參加的孩子，年級先帶「去年的下一級」
-  function enrollDialog() {
+  // 續報
+  function enrollSheet() {
     var f = data.family;
     var list = data.kids.filter(function (k) { return k.eligible || k.graduated; });
-    var body = '<p>' + t('en_pick') + '</p>' + list.map(function (k) {
-      if (k.graduated) return '<div class="ekid off"><div class="nm">' + esc(k.name) + '</div><div class="meta">' + t('en_grad') + '</div></div>';
-      return '<div class="ekid"><label class="check"><input type="checkbox" data-cid="' + esc(k.cid) + '" checked><span class="nm">' + esc(k.name) + '</span></label>' +
-        (k.lastGrade ? '<div class="meta">' + t('en_last', { grade: esc(gradeLabel(k.lastGrade)) }) + '</div>' : '') +
-        '<label class="f" for="g_' + esc(k.cid) + '">' + t('grade_this') + '</label>' + gradeSelect('g_' + k.cid, k.suggested) + '</div>';
+    var body = '<p class="gf" style="margin-top:4px">' + t('p_enroll_hint') + '</p>' + list.map(function (k) {
+      if (k.graduated) return '<div class="gh">' + esc(k.name) + '</div><div class="group"><div class="row meta">' + t('en_grad') + '</div></div>';
+      var prev = k.lastPrograms || [];
+      return '<div class="gh">' + esc(k.name) + '</div><div class="group" data-ek="' + esc(k.cid) + '">' +
+        toggleRow('data-toggle data-join', t('p_this_year'), true) +
+        '<div data-detail>' + toggleRow('data-toggle data-p="Awana"', 'Awana', true, t('awana_d')) +
+        toggleRow('data-toggle data-p="ss"', t('ss'), false, t('ss_d')) +
+        inRow('g_' + k.cid, t('p_grade_this'), '', { select: gradeOpts(k.suggested) }) + '</div></div>' +
+        (k.lastGrade ? '<p class="gf">' + esc(t('p_last', { grade: W.gradeLabel(k.lastGrade) })) + '（' + esc(k.lastYear) + ' · ' + esc(prev.map(W.programLabel).join('、')) + '）</p>' : '');
     }).join('') +
-      '<p class="hint">' + t('en_new_kid') + '</p>' +
-      '<h3 style="margin:22px 0 8px">' + t('en_contact_q') + '</h3><dl class="info">' +
-      '<dt>' + t('parent_name') + '</dt><dd>' + esc(f.name) + '</dd><dt>' + t('phone') + '</dt><dd>' + esc(W.fmtPhone(f.phone)) + '</dd>' +
-      '<dt>' + t('emergency') + '</dt><dd>' + esc(f.emergencyName) + '・' + esc(W.fmtPhone(f.emergencyPhone)) + '</dd></dl>' +
-      '<p><button type="button" class="btn ghost small" id="enEditFam">' + t('en_contact_edit') + '</button></p>';
-    var d = W.dialog({
-      title: t('en_dialog', { year: data.year }),
-      body: body,
-      actions: [
-        { label: t('en_submit'), onClick: function (close, el) {
-          var picks = [], missing = false;
-          el.querySelectorAll('[data-cid]').forEach(function (cb) {
-            if (!cb.checked) return;
-            var g = el.querySelector('#g_' + cb.getAttribute('data-cid')).value;
-            if (!g) missing = true;
-            picks.push({ cid: cb.getAttribute('data-cid'), grade: g });
-          });
-          if (!picks.length) { showErr(el, t('en_none')); return true; }
-          if (missing) { showErr(el, t('err_fix')); return true; }
-          var btn = el.querySelector('.dlg-actions .btn');
-          btn.disabled = true; btn.textContent = t('pz_saving');
-          W.call('enroll', { token: W.getToken(), kids: picks }).then(function (r) {
-            if (r.ok) {
-              data = r.data; close(); render();
-              W.toast(t('en_done', { names: r.added.map(function (x) { return x.name; }).join(', ') }));
-              return;
-            }
-            btn.disabled = false; btn.textContent = t('en_submit');
-            if (r.error === 'auth') { close(); W.setToken(''); err = t('e_auth'); go('login'); return; }
-            showErr(el, W.errText(r.error));
-          });
-          return true;
-        } },
-        { label: t('cancel'), kind: 'ghost' },
-      ],
-    });
-    d.el.querySelector('#enEditFam').onclick = function () { d.close(); familyDialog(enrollDialog); };
-  }
-
-  function kidDialog(k) {
-    var showGrade = !k || k.enrolled;
-    var body = '<div class="row">' + inputField('k_first', t('first'), k ? k.first : '', { req: 1 }) +
-      inputField('k_last', t('last'), k ? k.last : (data.family.last || ''), { req: 1 }) + '</div>' +
-      (showGrade ? '<label class="f" for="k_grade">' + t('grade_this') + '<span class="req">' + t('required') + '</span></label>' + gradeSelect('k_grade', k ? k.grade : '') : '') +
-      inputField('k_notes', t('notes'), k ? k.notes : '', { textarea: 1, hint: t('notes_hint') }) +
-      (k && k.enrolled ? '<p style="margin-top:20px"><button type="button" class="btn linkbtn" id="wd">' + t('wd_link') + '</button></p>' : '');
-    var d = W.dialog({
-      title: k ? t('pz_kid_edit') : t('pz_kid_new'),
-      body: body,
-      actions: [
-        { label: k ? t('pz_save') : t('en_submit'), onClick: function (close, el) {
-          var kid = { cid: k ? k.cid : '', first: val(el, 'k_first'), last: val(el, 'k_last'),
-                      grade: showGrade ? val(el, 'k_grade') : '', notes: val(el, 'k_notes') };
-          if (!kid.first || !kid.last || (showGrade && !kid.grade)) { showErr(el, t('err_fix')); return true; }
-          save('saveKid', { kid: kid }, close, el);
-          return true;
-        } },
-        { label: t('cancel'), kind: 'ghost' },
-      ],
-    });
-    var wd = d.el.querySelector('#wd');
-    if (wd) wd.onclick = function () {
-      d.close();
-      W.dialog({ title: t('wd_link'), body: '<p>' + t('wd_q', { name: '<b>' + esc(k.name) + '</b>' }) + '</p>', actions: [
-        { label: t('wd_yes'), onClick: function (close, el) { save('withdraw', { cid: k.cid }, close, el, t('wd_done', { name: k.name })); return true; } },
-        { label: t('cancel'), kind: 'ghost' },
-      ] });
-    };
-  }
-
-  function familyDialog(after) {
-    var f = data.family;
-    W.dialog({
-      title: t('pz_family_edit'),
-      body: '<div class="row">' + inputField('f_first', t('first'), f.first, { req: 1 }) + inputField('f_last', t('last'), f.last, { req: 1 }) + '</div>' +
-        inputField('f_phone', t('phone'), W.fmtPhone(f.phone), { req: 1, type: 'tel', hint: t('phone_hint') }) +
-        inputField('f_en', t('emergency_name'), f.emergencyName, { req: 1 }) +
-        inputField('f_ep', t('emergency_phone'), W.fmtPhone(f.emergencyPhone), { req: 1, type: 'tel' }) +
-        inputField('f_pick', t('pickup'), f.pickup, { textarea: 1, hint: t('pickup_hint') }),
-      actions: [
-        { label: t('pz_save'), onClick: function (close, el) {
-          var v = { first: val(el, 'f_first'), last: val(el, 'f_last'), phone: val(el, 'f_phone'), emergencyName: val(el, 'f_en'), emergencyPhone: val(el, 'f_ep'), pickup: val(el, 'f_pick') };
-          if (!v.first || !v.last || !v.emergencyName || v.phone.replace(/\D/g, '').length < 10 || v.emergencyPhone.replace(/\D/g, '').length < 10) { showErr(el, t('err_fix')); return true; }
-          save('saveFamily', { family: v }, close, el, null, after);
-          return true;
-        } },
-        { label: t('cancel'), kind: 'ghost', onClick: function () { if (typeof after === 'function') setTimeout(after, 0); } },
-      ],
+      '<div class="gh">' + t('en_contact_q') + '</div><div class="group">' +
+      '<div class="row"><span class="k grow">' + t('p_phone') + '</span><span class="v">' + esc(W.fmtPhone(f.phone)) + '</span></div>' +
+      '<div class="row"><span class="k grow">' + t('p_emergency') + '</span><span class="v">' + esc((f.pickups[0] || {}).first ? f.pickups[0].first + ' ' + f.pickups[0].last + ' · ' + W.fmtPhone(f.pickups[0].phone) : '—') + '</span></div>' +
+      '<button class="row tint" type="button" id="enEdit">' + t('en_contact_edit') + '</button></div>' +
+      releaseBlock() +
+      '<div class="padx" style="margin-top:22px"><button class="pill fill" type="button" data-bigsave>' + t('en_submit') + '</button></div>';
+    openSheet({
+      title: t('p_enroll_title', { year: data.year }), save: t('p_submit'), body: body,
+      onOpen: function (el) {
+        bindToggles(el); setupPad(el);
+        el.querySelectorAll('[data-ek]').forEach(function (g) {
+          var j = g.querySelector('[data-join]'), det = g.querySelector('[data-detail]');
+          j.onToggle = function () { det.hidden = !j.classList.contains('on'); };
+        });
+        el.querySelector('#enEdit').onclick = function () { closeSheet(); setTimeout(function () { contactSheet(enrollSheet); }, 350); };
+      },
+      onSave: function (el) {
+        var picks = [], bad = false;
+        el.querySelectorAll('[data-ek]').forEach(function (g) {
+          if (!isOn(g, '[data-join]')) return;
+          var cid = g.getAttribute('data-ek'), grade = val('g_' + cid), aw = isOn(g, '[data-p="Awana"]'), ss = isOn(g, '[data-p="ss"]');
+          if (!grade || (!aw && !ss)) bad = true;
+          picks.push({ cid: cid, grade: grade, awana: aw, ss: ss });
+        });
+        if (!picks.length) return sheetErr(t('en_none'));
+        if (bad) return sheetErr(t('err_fix'));
+        var sig = sigPayload();
+        if (!sig) return sheetErr(t('sign_need'));
+        act('enroll', Object.assign({ kids: picks }, sig), false, function (r) {
+          W.toast(t('en_done', { names: r.added.map(function (x) { return x.name; }).join(', ') }));
+        });
+      },
     });
   }
 
-  function inviteDialog() {
-    W.dialog({
-      title: t('pz_invite').replace(/^[＋+]\s*/, ''),
-      body: '<p>' + t('pz_invite_hint') + '</p>' + inputField('i_email', t('email'), '', { type: 'email' }),
-      actions: [
-        { label: t('pz_invite_send'), onClick: function (close, el) {
-          var e = val(el, 'i_email');
-          if (!/^\S+@\S+\.\S+$/.test(e)) { showErr(el, t('err_email')); return true; }
-          save('invite', { email: e }, close, el, t('pz_invited', { email: e }));
-          return true;
-        } },
-        { label: t('cancel'), kind: 'ghost' },
-      ],
+  // 孩子資料（新增或修改）
+  function kidSheet(k) {
+    var isNew = !k, enrolled = k && k.enrolled;
+    var progs = k ? k.programs : ['Awana'];
+    var body = '<div class="gh">' + (W.lang() === 'en' ? 'Name' : '姓名') + '</div><div class="group">' +
+      inRow('k_first', 'First Name', k ? k.first : '') + inRow('k_last', 'Last Name', k ? k.last : data.family.last) + '</div>' +
+      '<div class="gh"></div><div class="group">' + inRow('k_bday', t('birthday'), k ? k.birthday : '', { type: 'date' }) + '</div>';
+    if (isNew || enrolled) {
+      body += '<div class="gh">' + t('p_programs_this') + '</div><div class="group">' +
+        toggleRow('data-toggle data-p="Awana"', 'Awana', progs.indexOf('Awana') >= 0, t('awana_d')) +
+        toggleRow('data-toggle data-p="ss"', t('ss'), progs.indexOf('主日學') >= 0, t('ss_d')) +
+        inRow('k_grade', t('p_grade_this'), '', { select: gradeOpts(k ? k.grade : '') }) + '</div>';
+    }
+    body += '<div class="gh">' + t('notes').replace(/（.*）|\(.*\)/, '') + '</div><div class="group"><div class="row"><textarea id="k_notes" placeholder="—">' + esc(k ? k.notes : '') + '</textarea></div></div>' +
+      '<p class="gf">' + t('notes_hint') + '</p>';
+    if (isNew) body += releaseBlock();
+    if (enrolled) body += '<div class="gh"></div><div class="group"><button class="row red center" type="button" id="wd">' + t('p_withdraw') + '</button></div>';
+    openSheet({
+      title: k ? k.name : t('p_add_kid'), save: isNew ? t('p_submit') : t('p_save'), body: body,
+      onOpen: function (el) {
+        bindToggles(el); if (isNew) setupPad(el);
+        var wd = el.querySelector('#wd');
+        if (wd) wd.onclick = function () {
+          alertBox(t('p_withdraw'), t('wd_q', { name: k.name }), t('wd_yes'), function () { act('withdraw', { cid: k.cid }, t('wd_done', { name: k.name })); });
+        };
+      },
+      onSave: function (el) {
+        var v = { cid: k ? k.cid : '', first: val('k_first'), last: val('k_last'), birthday: val('k_bday'), notes: val('k_notes') };
+        if (isNew || enrolled) { v.grade = val('k_grade'); v.awana = isOn(el, '[data-p="Awana"]'); v.ss = isOn(el, '[data-p="ss"]'); }
+        if (!v.first || !v.last || !v.birthday || ((isNew || enrolled) && (!v.grade || (!v.awana && !v.ss)))) return sheetErr(t('err_fix'));
+        var sig = isNew ? sigPayload() : {};
+        if (!sig) return sheetErr(t('sign_need'));
+        act('saveKid', Object.assign({ kid: v }, sig));
+      },
     });
   }
 
-  function removeDialog(e) {
-    W.dialog({
-      title: t('pz_remove'),
-      body: '<p>' + t('pz_remove_q', { email: '<b>' + esc(e) + '</b>' }) + '</p>',
-      actions: [
-        { label: t('pz_remove'), onClick: function (close, el) { save('removeParent', { email: e }, close, el); return true; } },
-        { label: t('cancel'), kind: 'ghost' },
-      ],
+  // 聯絡資料
+  function contactSheet(after) {
+    var f = data.family, a = f.address || {}, sp = f.second || {};
+    var pk = f.pickups.slice(); if (!pk.length) pk.push({});
+    function pickBlock(p, i) {
+      return '<div class="gh">' + esc(i === 0 ? t('pick_1') : t('pick_n', { n: i + 1 })) + '</div><div class="group" data-pick>' +
+        inRow('pk_f' + i, 'First Name', p.first) + inRow('pk_l' + i, 'Last Name', p.last) +
+        inRow('pk_r' + i, t('relation_short'), '', { select: W.relationOptions(p.relation, ['祖父母', '親戚', '朋友', '保母', '其他']) }) +
+        inRow('pk_p' + i, t('p_phone'), W.fmtPhone(p.phone), { type: 'tel' }) + '</div>';
+    }
+    var body = '<div class="gh">' + t('p_parent') + '</div><div class="group">' +
+      inRow('f_first', 'First Name', f.first) + inRow('f_last', 'Last Name', f.last) +
+      inRow('f_rel', t('relation_short'), '', { select: W.relationOptions(f.relation, ['父親', '母親', '祖父母', '監護人', '其他']) }) +
+      inRow('f_phone', t('p_phone'), W.fmtPhone(f.phone), { type: 'tel' }) + '</div><p class="gf">' + t('phone_hint') + '</p>' +
+      '<div class="gh">' + t('address') + '（' + t('optional') + '）</div><div class="group">' +
+      inRow('a_st', t('street'), a.street) + inRow('a_city', t('city'), a.city) +
+      inRow('a_state', t('state'), '', { select: ['', 'DE', 'PA', 'MD', 'NJ'].map(function (x) { return '<option' + (x === a.state ? ' selected' : '') + '>' + x + '</option>'; }).join('') }) +
+      inRow('a_zip', t('zip'), a.zip) + '</div>' +
+      '<div class="gh">' + t('second_h') + '（' + t('optional') + '）</div><div class="group">' +
+      inRow('s_first', 'First Name', sp.first) + inRow('s_last', 'Last Name', sp.last) +
+      inRow('s_rel', t('relation_short'), '', { select: W.relationOptions(sp.relation, ['父親', '母親', '祖父母', '監護人', '其他']) }) +
+      inRow('s_phone', t('p_phone'), W.fmtPhone(sp.phone), { type: 'tel' }) + '</div>' +
+      '<div id="picks">' + pk.map(pickBlock).join('') + '</div>' +
+      '<div class="gh"></div><div class="group" id="addPickG"><button class="row tint" type="button" id="addPick">' + t('add_pickup') + '</button></div>';
+    openSheet({
+      title: t('p_contact_title'), body: body,
+      onOpen: function (el) {
+        var refresh = function () { el.querySelector('#addPickG').hidden = el.querySelectorAll('[data-pick]').length >= 3; };
+        refresh();
+        el.querySelector('#addPick').onclick = function () {
+          var n = el.querySelectorAll('[data-pick]').length;
+          el.querySelector('#picks').insertAdjacentHTML('beforeend', pickBlock({}, n)); refresh();
+        };
+      },
+      onSave: function (el) {
+        var picks = [];
+        el.querySelectorAll('[data-pick]').forEach(function (g, i) {
+          picks.push({ first: val('pk_f' + i), last: val('pk_l' + i), relation: val('pk_r' + i), phone: val('pk_p' + i) });
+        });
+        var v = { first: val('f_first'), last: val('f_last'), relation: val('f_rel'), phone: val('f_phone'),
+          address: { street: val('a_st'), city: val('a_city'), state: val('a_state'), zip: val('a_zip') },
+          second: { first: val('s_first'), last: val('s_last'), relation: val('s_rel'), phone: val('s_phone') },
+          pickups: picks.filter(function (p) { return p.first; }) };
+        if (!v.first || !v.last || v.phone.replace(/\D/g, '').length < 10) return sheetErr(t('err_fix'));
+        if (!v.pickups.length || v.pickups[0].phone.replace(/\D/g, '').length < 10) return sheetErr(t('e_need_pickup'));
+        act('saveFamily', { family: v }, null, after ? function () { setTimeout(after, 350); } : null);
+      },
     });
   }
 
-  // ─── 開始 ───
-  if (wait) go('wait');
-  else loadMe();
+  function inviteSheet() {
+    openSheet({
+      title: t('p_invite'), save: W.lang() === 'en' ? 'Add' : '加入',
+      body: '<p class="gf" style="margin-top:4px">' + t('pz_invite_hint') + '</p><div class="gh"></div><div class="group">' +
+        inRow('i_email', 'Email', '', { type: 'email', ph: 'name@example.com' }) + '</div>',
+      onSave: function () {
+        var e = val('i_email');
+        if (!/^\S+@\S+\.\S+$/.test(e)) return sheetErr(t('err_email'));
+        act('invite', { email: e }, t('pz_invited', { email: e }));
+      },
+    });
+  }
+
+  function alertBox(title, msg, yes, onYes) {
+    var b = document.createElement('div');
+    b.className = 'alert-back';
+    b.innerHTML = '<div class="alert" role="alertdialog" aria-modal="true"><div class="msg"><b>' + esc(title) + '</b><span>' + esc(msg) + '</span></div>' +
+      '<div class="btns"><button type="button" data-no>' + t('p_cancel') + '</button><button type="button" class="destructive" data-yes>' + esc(yes) + '</button></div></div>';
+    document.body.appendChild(b);
+    b.querySelector('[data-no]').onclick = function () { b.remove(); };
+    b.querySelector('[data-yes]').onclick = function () { b.remove(); onYes(); };
+    b.querySelector('[data-yes]').focus();
+  }
+
+  if (wait) go('wait'); else loadMe();
+  window.__demoSign = function () { if (pad) pad.demo(); };   // 自動測試用
 })();
 </script>
 </body>

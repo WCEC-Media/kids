@@ -1,5 +1,5 @@
 /**
- * WCEC 兒童事工：Awana 報名、家長專區、簽到 後端（Google Apps Script）
+ * WCEC 兒童事工：Awana／主日學 報名、家長專區、簽到 後端（Google Apps Script）
  *
  * 放在「兒童事工」那一份獨立的試算表裡（不要放在 App 公告用的試算表）。
  * 第一次使用：重新整理試算表 → 上方選單「兒童事工」→「初始設定」。
@@ -7,10 +7,11 @@
  *       執行身分：我（教會帳號）   存取權：所有人
  *
  * 資料的設計：
- *   家庭  ：一個家庭一列（家長、聯絡方式、家庭簽到卡）
- *   孩子  ：一個孩子一列，跨學年都用同一列（姓名、過敏）
- *   報名  ：一個孩子「每個學年」一列（年級、班別、狀態）
- *           → 續報只要新增今年的報名，不用重填資料；某個孩子今年不上，就不幫他報
+ *   家庭   ：一個家庭一列（家長、住址、第二位家長、緊急聯絡人、接送人、家庭簽到卡）
+ *   孩子   ：一個孩子一列，跨學年都用同一列（姓名、生日、過敏）
+ *   報名   ：一個孩子「每個學年、每個項目（Awana／主日學）」一列（年級、班別、狀態）
+ *            → 續報只要新增今年的報名，不用重填資料；某個孩子今年不上，就不幫他報
+ *   同意書 ：家長每個學年簽一次的 Release of Liability（簽名圖片存在 Google Drive）
  *
  * 前端呼叫方式：POST，Content-Type: text/plain，內容是 JSON：{ action, ... }
  */
@@ -22,18 +23,24 @@ var SHEET = {
   FAMILIES: '家庭',
   KIDS: '孩子',
   ENROLL: '報名',
+  RELEASE: '同意書',
   LOG: '簽到紀錄',
   SESSIONS: '登入裝置',
 };
 
+var PROGRAMS = ['Awana', '主日學'];
+
 var HEADERS = {
   '設定': ['項目', '值', '說明'],
   '班別': ['年級', '班別'],
-  '家庭': ['家庭編號', '建立時間', '家長 First Name', '家長 Last Name', '手機', '手機末四碼', 'Email', '其他家長Email',
-           '緊急聯絡人', '緊急聯絡人電話', '授權接送人', 'QR代碼', '備註'],
-  '孩子': ['孩子編號', '家庭編號', 'First Name', 'Last Name', '過敏/特殊需求', '建立時間', '狀態',
+  '家庭': ['家庭編號', '建立時間', '家長 First Name', '家長 Last Name', '關係', '手機', '手機末四碼', 'Email', '其他家長Email',
+           '住址', 'City', 'State', 'ZIP',
+           '第二家長 First Name', '第二家長 Last Name', '第二家長關係', '第二家長手機',
+           '緊急聯絡人', '緊急聯絡人關係', '緊急聯絡人電話', '其他接送人', '願意服事', 'QR代碼', '備註'],
+  '孩子': ['孩子編號', '家庭編號', 'First Name', 'Last Name', '生日', '過敏/特殊需求', '建立時間', '狀態',
            '家長手機（手動輸入用）', '年級（手動輸入用）'],
-  '報名': ['學年', '孩子編號', '家庭編號', '孩子姓名', '年級', '班別', '報名時間', '狀態', '備註'],
+  '報名': ['學年', '項目', '孩子編號', '家庭編號', '孩子姓名', '年級', '班別', '報名時間', '狀態', '備註'],
+  '同意書': ['學年', '家庭編號', '簽名人', '簽名', '簽名時間', '來源'],
   '簽到紀錄': ['日期', '孩子編號', '孩子姓名', '班別', '家庭編號', '簽到時間',
              '簽到方式', '接送碼', '簽退時間', '簽退同工'],
   '登入裝置': ['建立時間', '家庭編號', 'Email', '權杖雜湊', '最後使用', '裝置', '狀態'],
@@ -47,10 +54,11 @@ var DEFAULT_SETTINGS = [
   ['寄確認信', 'TRUE', '報名成功後寄確認信給家長'],
   ['網站網址', 'https://wcec-media.github.io/kids/', '報名表、家長專區所在的網址，Email 裡的按鈕會連到這裡'],
   ['登入保持天數', '365', '家長多久沒打開家長專區，就要重新用 Email 確認'],
+  ['簽名資料夾ID', '', '家長簽名圖片存放的 Google Drive 資料夾；留空會自動建立'],
   ['時區', 'America/New_York', ''],
 ];
 
-// 由小到大排列：續報時「建議年級」就是下一列；最後一列（6 年級）之後就算從 Awana 畢業
+// 由小到大排列：續報時「建議年級」就是下一列；最後一列（6 年級）之後就算畢業
 var DEFAULT_CLASSES = [
   ['2歲', 'Puggles'], ['3歲', 'Cubbies'], ['4歲 (PreK)', 'Cubbies'],
   ['K', 'Sparks'], ['1', 'Sparks'], ['2', 'Sparks'],
@@ -80,20 +88,27 @@ function setup() {
   if (st.getLastRow() === 1) st.getRange(2, 1, DEFAULT_SETTINGS.length, 3).setValues(DEFAULT_SETTINGS);
   var cl = ss.getSheetByName(SHEET.CLASSES);
   if (cl.getLastRow() === 1) cl.getRange(2, 1, DEFAULT_CLASSES.length, 2).setValues(DEFAULT_CLASSES);
-  // 電話、末四碼、年級存成文字，避免開頭的 0 被吃掉、K 被當成別的東西
-  ss.getSheetByName(SHEET.FAMILIES).getRange('E:F').setNumberFormat('@');
-  ss.getSheetByName(SHEET.FAMILIES).getRange('J:J').setNumberFormat('@');
-  ss.getSheetByName(SHEET.KIDS).getRange('H:I').setNumberFormat('@');
-  ss.getSheetByName(SHEET.ENROLL).getRange('A:A').setNumberFormat('@');
-  ss.getSheetByName(SHEET.ENROLL).getRange('E:E').setNumberFormat('@');
+  // 電話、ZIP、年級、學年存成文字，避免開頭的 0 被吃掉、2026-27 被當成日期
+  textCols_(SHEET.FAMILIES, ['手機', '手機末四碼', 'ZIP', '第二家長手機', '緊急聯絡人電話']);
+  textCols_(SHEET.KIDS, ['家長手機（手動輸入用）', '年級（手動輸入用）']);
+  textCols_(SHEET.ENROLL, ['學年', '年級']);
+  textCols_(SHEET.RELEASE, ['學年']);
   SpreadsheetApp.getUi().alert('設定完成。請到「設定」工作表填入簽到站密碼，並確認網站網址。');
+}
+
+function textCols_(name, headers) {
+  var sh = SpreadsheetApp.getActive().getSheetByName(name);
+  headers.forEach(function (h) {
+    var col = HEADERS[name].indexOf(h) + 1;
+    if (col > 0) sh.getRange(1, col, sh.getMaxRows ? sh.getMaxRows() : 1000, 1).setNumberFormat('@');
+  });
 }
 
 /**
  * 同工手動輸入現有家庭後執行：
- *  家庭：填 家長 First / Last Name、手機、Email（其他可留空）
- *  孩子：填 First / Last Name、「家長手機（手動輸入用）」，要報今年的再填「年級（手動輸入用）」
- *  → 自動補編號、末四碼、QR 代碼，把孩子對到家庭，並幫填了年級的孩子報名今年
+ *  家庭：填 家長 First / Last Name、手機、Email（其他可留空，之後家長可以在家長專區補）
+ *  孩子：填 First / Last Name、「家長手機（手動輸入用）」；要報今年 Awana 的再填「年級（手動輸入用）」
+ *  → 自動補編號、末四碼、QR 代碼，把孩子對到家庭，並幫填了年級的孩子報名今年的 Awana
  */
 function fillMissing() {
   var s = settings_();
@@ -116,7 +131,7 @@ function fillMissing() {
   fams.forEach(function (f) { byPhone[digits_(f['手機'])] = f['家庭編號']; });
   var gm = gradeMap_();
   var kidSheet = ss.getSheetByName(SHEET.KIDS);
-  var enrolledNow = enrollMap_(s['學年']);
+  var enrolledNow = enrollMap_(s['學年'], 'Awana');
   rows_(SHEET.KIDS).forEach(function (k) {
     var changed = false;
     if (!k['家庭編號']) {
@@ -130,17 +145,17 @@ function fillMissing() {
     if (changed) { writeRow_(kidSheet, SHEET.KIDS, k); filledK++; }
     var g = String(k['年級（手動輸入用）'] || '');
     if (g && k['家庭編號'] && !enrolledNow[k['孩子編號']]) {
-      if (gm[g]) { addEnrollment_(k, g, s['學年'], now, '同工輸入'); enrolled++; }
+      if (gm[g]) { addEnrollment_(k, g, s['學年'], 'Awana', now, '同工輸入'); enrolled++; }
       else problems.push('孩子「' + kidName_(k) + '」的年級「' + g + '」不在「班別」工作表裡');
     }
   });
-  SpreadsheetApp.getUi().alert('補齊了 ' + filledF + ' 個家庭、' + filledK + ' 個孩子，幫 ' + enrolled + ' 個孩子報名 ' + s['學年'] + '。' +
+  SpreadsheetApp.getUi().alert('補齊了 ' + filledF + ' 個家庭、' + filledK + ' 個孩子，幫 ' + enrolled + ' 個孩子報名 ' + s['學年'] + ' Awana。' +
     (problems.length ? '\n\n需要注意：\n' + problems.join('\n') : ''));
 }
 
 /**
  * 新學年開放報名後執行：寄信給「以前報過、今年還沒報」的家庭，請他們到家長專區續報
- * 已經從 Awana 畢業（去年 6 年級）的孩子不算
+ * 已經畢業（去年 6 年級）的孩子不算
  */
 function sendRenewalNotices() {
   var s = settings_();
@@ -150,8 +165,7 @@ function sendRenewalNotices() {
   rows_(SHEET.FAMILIES).forEach(function (f) {
     var kids = kidsOfFamily_(f['家庭編號']).map(function (k) { return kidStatus_(k, year); });
     var need = kids.filter(function (k) { return !k.enrolled && k.eligible && k.lastYear; });
-    var any = kids.some(function (k) { return k.enrolled; });
-    if (!need.length || any) return;
+    if (!need.length || kids.some(function (k) { return k.enrolled; })) return;
     familyEmails_(f).forEach(function (email) {
       sendRenewalMail_(email, year, need.map(function (k) { return k.name; }));
       sent++;
@@ -271,14 +285,15 @@ function register_(req) {
 
   var p = req.parent || {};
   var phone = digits_(p.phone);
-  var gm = gradeMap_();
   var kids = (req.kids || []).filter(function (k) { return k && clean_(k.first) && clean_(k.last); });
-  if (!clean_(p.first) || !clean_(p.last) || phone.length < 10 || !/^\S+@\S+\.\S+$/.test(p.email || '') ||
-      !clean_(p.emergencyName) || digits_(p.emergencyPhone).length < 10 ||
-      kids.length === 0 || kids.length > 8 || !req.consent ||
-      kids.some(function (k) { return !gm[String(k.grade)]; })) {
+  var pickups = (req.pickups || []).filter(function (x) { return x && clean_(x.first); });
+  if (!clean_(p.first) || !clean_(p.last) || !clean_(p.relation) || phone.length < 10 || !validEmail_(p.email) ||
+      kids.length === 0 || kids.length > 8 || !kids.every(validKid_) ||
+      !pickups.length || digits_(pickups[0].phone).length < 10 || !clean_(req.signer)) {
     return { ok: false, error: 'invalid' };
   }
+  var sig = parseSignature_(req.signature);
+  if (!sig) return { ok: false, error: 'signature' };
 
   var cache = CacheService.getScriptCache();
   if (!bump_(cache, 'reg:' + phone, 3, 600) || !bump_(cache, 'reg:all', 60, 3600)) {
@@ -290,7 +305,7 @@ function register_(req) {
   try {
     var ss = SpreadsheetApp.getActive();
     var now = new Date();
-    var year = s['學年'];
+    var year = String(s['學年']);
     var m = findMatches_(p, kids);
     var fam = m.strong && m.strong.f;
     var isNew = !fam;
@@ -306,10 +321,17 @@ function register_(req) {
           (w.reason.indexOf('kid') >= 0 ? '孩子同名' : ''));
       });
       if (req.oldEmail) notes.push('家長表示是舊家庭、但已不用舊 Email，請同工確認後合併');
-      ss.getSheetByName(SHEET.FAMILIES).appendRow([
-        fid, now, clean_(p.first), clean_(p.last), phone, phone.slice(-4), lc_(p.email), '',
-        clean_(p.emergencyName), digits_(p.emergencyPhone), clean_(p.pickup), newQr_(), notes.join('；'),
-      ]);
+      var sp = req.second || {};
+      var spEmail = validEmail_(sp.email) && lc_(sp.email) !== lc_(p.email) &&
+        !rows_(SHEET.FAMILIES).some(function (f) { return familyEmails_(f).indexOf(lc_(sp.email)) >= 0; }) ? lc_(sp.email) : '';
+      var f = {
+        '家庭編號': fid, '建立時間': now, '家長 First Name': clean_(p.first), '家長 Last Name': clean_(p.last),
+        '關係': clean_(p.relation), '手機': phone, '手機末四碼': phone.slice(-4), 'Email': lc_(p.email), '其他家長Email': spEmail,
+        'QR代碼': newQr_(), '備註': notes.join('；'),
+      };
+      applyFamilyDetails_(f, req);
+      appendObj_(SHEET.FAMILIES, f);
+      if (spEmail) sendInviteMail_(spEmail, parentName_(f));
     } else {
       // 已登記的家庭：不覆蓋家長資料（避免別人改掉聯絡方式），只加孩子，並留備註
       fid = fam['家庭編號'];
@@ -317,7 +339,8 @@ function register_(req) {
       setCell_(SHEET.FAMILIES, fam._row, '備註', [fam['備註'], note].filter(String).join('；'));
     }
 
-    var added = addKidsAndEnroll_(fid, kids, year, now);
+    saveRelease_(fid, clean_(req.signer), sig, year, '報名表');
+    var added = addKidsAndEnroll_(fid, kids, year, now, '');
     if (isTrue_(s['寄確認信'])) sendConfirm_(isNew ? lc_(p.email) : fam['Email'], added, year);
 
     var out = { ok: true, dup: !isNew, kids: added, last4: phone.slice(-4) };
@@ -333,46 +356,94 @@ function register_(req) {
   }
 }
 
+// 住址、第二位家長、緊急聯絡人／接送人、服事意願（報名表和家長專區共用）
+function applyFamilyDetails_(f, v) {
+  var a = v.address || {};
+  f['住址'] = clean_(a.street); f['City'] = clean_(a.city); f['State'] = clean_(a.state); f['ZIP'] = clean_(a.zip);
+  var sp = v.second || {};
+  f['第二家長 First Name'] = clean_(sp.first); f['第二家長 Last Name'] = clean_(sp.last);
+  f['第二家長關係'] = clean_(sp.relation); f['第二家長手機'] = digits_(sp.phone);
+  var pk = (v.pickups || []).filter(function (x) { return x && clean_(x.first); });
+  var em = pk[0] || {};
+  f['緊急聯絡人'] = fullName_(em.first, em.last); f['緊急聯絡人關係'] = clean_(em.relation); f['緊急聯絡人電話'] = digits_(em.phone);
+  f['其他接送人'] = pk.slice(1, 3).map(function (x) {
+    return [fullName_(x.first, x.last), clean_(x.relation), digits_(x.phone)].join(' | ');
+  }).join('；');
+  if (v.volunteer) {
+    f['願意服事'] = PROGRAMS.filter(function (p, i) { return i === 0 ? v.volunteer.awana : v.volunteer.ss; }).join('、');
+  }
+}
+
+function validKid_(k) {
+  var progs = programsOf_(k);
+  return !!gradeMap_()[String(k.grade)] && /^\d{4}-\d{2}-\d{2}$/.test(String(k.birthday || '')) && progs.length > 0;
+}
+function programsOf_(k) { return PROGRAMS.filter(function (p, i) { return i === 0 ? k.awana : k.ss; }); }
+
 // 同一個家庭裡同名的孩子視為同一個人：只補報名，不重複建立
-function addKidsAndEnroll_(fid, kids, year, now) {
+function addKidsAndEnroll_(fid, kids, year, now, note) {
   var existing = {};
   kidsOfFamily_(fid).forEach(function (k) { existing[normName_(kidName_(k))] = k; });
-  var enrolled = enrollMap_(year);
   var gm = gradeMap_();
-  var sheet = SpreadsheetApp.getActive().getSheetByName(SHEET.KIDS);
   var added = [];
   kids.forEach(function (v) {
     var name = fullName_(v.first, v.last);
     var k = existing[normName_(name)];
     if (!k) {
       k = { '孩子編號': newKidId_(), '家庭編號': fid, 'First Name': clean_(v.first), 'Last Name': clean_(v.last),
-            '過敏/特殊需求': clean_(v.notes), '建立時間': now, '狀態': '有效' };
-      sheet.appendRow(HEADERS[SHEET.KIDS].map(function (h) { return k[h] === undefined ? '' : k[h]; }));
+            '生日': clean_(v.birthday), '過敏/特殊需求': clean_(v.notes), '建立時間': now, '狀態': '有效' };
+      appendObj_(SHEET.KIDS, k);
       existing[normName_(name)] = k;
     }
-    if (enrolled[k['孩子編號']]) return;                         // 今年已經報過
-    addEnrollment_(k, String(v.grade), year, now, '');
-    enrolled[k['孩子編號']] = true;
-    added.push({ name: kidName_(k), cls: gm[String(v.grade)] || '' });
+    var progs = programsOf_(v).filter(function (p) { return !enrollMap_(year, p)[k['孩子編號']]; });
+    progs.forEach(function (p) { addEnrollment_(k, String(v.grade), year, p, now, note); });
+    if (progs.length) added.push({ name: kidName_(k), cls: gm[String(v.grade)] || '', programs: progs });
   });
   return added;
 }
 
-function addEnrollment_(k, grade, year, now, note) {
+function addEnrollment_(k, grade, year, program, now, note) {
   var gm = gradeMap_();
   var sheet = SpreadsheetApp.getActive().getSheetByName(SHEET.ENROLL);
-  // 今年之前取消過的報名，直接改回有效，不另外新增一列
+  var cls = program === 'Awana' ? (gm[grade] || '') : '';
+  // 這個學年之前取消過的報名，直接改回有效，不另外新增一列
   var old = rows_(SHEET.ENROLL).filter(function (e) {
-    return String(e['學年']) === String(year) && e['孩子編號'] === k['孩子編號'];
+    return String(e['學年']) === String(year) && e['孩子編號'] === k['孩子編號'] && e['項目'] === program;
   })[0];
   if (old) {
-    old['年級'] = grade; old['班別'] = gm[grade] || ''; old['報名時間'] = now; old['狀態'] = '有效';
+    old['年級'] = grade; old['班別'] = cls; old['報名時間'] = now; old['狀態'] = '有效';
     old['孩子姓名'] = kidName_(k);
     old['備註'] = [old['備註'], note].filter(String).join('；');
     writeRow_(sheet, SHEET.ENROLL, old);
     return;
   }
-  sheet.appendRow([String(year), k['孩子編號'], k['家庭編號'], kidName_(k), grade, gm[grade] || '', now, '有效', note || '']);
+  sheet.appendRow([String(year), program, k['孩子編號'], k['家庭編號'], kidName_(k), grade, cls, now, '有效', note || '']);
+}
+
+// ───────────────────────── 同意書簽名 ─────────────────────────
+function parseSignature_(dataUrl) {
+  var m = /^data:image\/png;base64,([A-Za-z0-9+\/=]+)$/.exec(String(dataUrl || ''));
+  return m && m[1].length > 200 && m[1].length < 400000 ? m[1] : null;
+}
+
+// 簽名圖片存在 Drive 的私人資料夾，試算表只放連結
+function saveRelease_(fid, signer, b64, year, source) {
+  var now = new Date();
+  var name = year + '_' + fid + '_' + Utilities.formatDate(now, tz_(settings_()), 'yyyyMMdd-HHmm') + '.png';
+  var file = signatureFolder_().createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'image/png', name));
+  SpreadsheetApp.getActive().getSheetByName(SHEET.RELEASE).appendRow([String(year), fid, signer, file.getUrl(), now, source]);
+}
+
+function signatureFolder_() {
+  var id = String(settings_()['簽名資料夾ID'] || '');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  var folder = DriveApp.createFolder('WCEC 兒童事工 家長簽名');
+  setSetting_('簽名資料夾ID', folder.getId());
+  return folder;
+}
+
+function signedThisYear_(fid, year) {
+  return rows_(SHEET.RELEASE).some(function (r) { return r['家庭編號'] === fid && String(r['學年']) === String(year); });
 }
 
 // ───────────────────────── 家長登入：Email 確認按鈕＋驗證碼 ─────────────────────────
@@ -393,7 +464,7 @@ function loginStart_(req) {
     if (!email) return { ok: false, error: 'no_email' };
   } else {
     email = lc_(req.email);
-    if (!/^\S+@\S+\.\S+$/.test(email)) return { ok: false, error: 'invalid' };
+    if (!validEmail_(email)) return { ok: false, error: 'invalid' };
     fam = fams.filter(function (f) { return familyEmails_(f).indexOf(email) >= 0; })[0];
     if (!fam) return { ok: false, error: 'no_account' };
   }
@@ -491,16 +562,17 @@ function me_(req) {
 
 /**
  * 每個孩子今年的狀態：
- *   enrolled  ：今年已報名（grade、cls 是今年的）
- *   eligible  ：還在 Awana 年齡內，可以報今年（去年 6 年級的就是畢業了）
+ *   programs  ：今年報了哪些項目
+ *   enrolled  ：今年至少報了一個項目
+ *   eligible  ：還在年齡內、今年還沒報（去年 6 年級的就是畢業了）
  *   suggested ：建議今年的年級（去年年級的下一級）
  */
 function kidStatus_(k, year) {
   var list = grades_().map(function (g) { return g.grade; });
   var gm = gradeMap_();
-  var ens = rows_(SHEET.ENROLL).filter(function (e) { return e['孩子編號'] === k['孩子編號']; });
-  var cur = ens.filter(function (e) { return String(e['學年']) === String(year) && e['狀態'] === '有效'; })[0];
-  var past = ens.filter(function (e) { return String(e['學年']) < String(year) && e['狀態'] === '有效'; })
+  var ens = rows_(SHEET.ENROLL).filter(function (e) { return e['孩子編號'] === k['孩子編號'] && e['狀態'] === '有效'; });
+  var cur = ens.filter(function (e) { return String(e['學年']) === String(year); });
+  var past = ens.filter(function (e) { return String(e['學年']) < String(year); })
     .sort(function (a, b) { return String(b['學年']).localeCompare(String(a['學年'])); })[0];
   var suggested = '', eligible = true;
   if (past) {
@@ -511,14 +583,17 @@ function kidStatus_(k, year) {
       else suggested = list[idx + gap];
     }
   }
+  var grade = cur.length ? String(cur[0]['年級']) : '';
   return {
     cid: k['孩子編號'], first: k['First Name'], last: k['Last Name'], name: kidName_(k),
-    notes: k['過敏/特殊需求'],
-    enrolled: !!cur,
-    grade: cur ? String(cur['年級']) : '', cls: cur ? (cur['班別'] || gm[String(cur['年級'])] || '') : '',
+    birthday: dateOnly_(k['生日']), notes: k['過敏/特殊需求'],
+    programs: cur.map(function (e) { return e['項目']; }),
+    enrolled: cur.length > 0,
+    grade: grade, cls: grade ? gm[grade] || '' : '',
     lastYear: past ? String(past['學年']) : '', lastGrade: past ? String(past['年級']) : '',
-    suggested: suggested, eligible: !cur && eligible,
-    graduated: !cur && !eligible,
+    lastPrograms: past ? ens.filter(function (e) { return String(e['學年']) === String(past['學年']); }).map(function (e) { return e['項目']; }) : [],
+    suggested: suggested, eligible: !cur.length && eligible,
+    graduated: !cur.length && !eligible,
   };
 }
 
@@ -528,57 +603,86 @@ function familyView_(a) {
     me: a.email,
     year: year,
     open: isTrue_(s['開放報名']),
+    signed: signedThisYear_(f['家庭編號'], year),
     grades: grades_(),
     family: {
-      first: f['家長 First Name'], last: f['家長 Last Name'], name: parentName_(f),
+      first: f['家長 First Name'], last: f['家長 Last Name'], name: parentName_(f), relation: f['關係'],
       phone: String(f['手機']), last4: String(f['手機末四碼']),
       email: lc_(f['Email']), others: splitEmails_(f['其他家長Email']),
-      emergencyName: f['緊急聯絡人'], emergencyPhone: String(f['緊急聯絡人電話']),
-      pickup: f['授權接送人'], qr: f['QR代碼'],
+      address: { street: f['住址'], city: f['City'], state: f['State'], zip: String(f['ZIP'] || '') },
+      second: { first: f['第二家長 First Name'], last: f['第二家長 Last Name'], relation: f['第二家長關係'], phone: String(f['第二家長手機'] || '') },
+      pickups: pickupsOf_(f),
+      qr: f['QR代碼'],
     },
     kids: kidsOfFamily_(f['家庭編號']).map(function (k) { return kidStatus_(k, year); }),
   };
 }
 
-// 續報／報名：勾選要報今年的孩子和年級，不用重填資料
+function pickupsOf_(f) {
+  var list = [];
+  if (f['緊急聯絡人']) list.push(splitName_(f['緊急聯絡人'], f['緊急聯絡人關係'], f['緊急聯絡人電話']));
+  String(f['其他接送人'] || '').split('；').filter(String).forEach(function (line) {
+    var p = line.split('|').map(function (x) { return x.trim(); });
+    list.push(splitName_(p[0], p[1], p[2]));
+  });
+  return list;
+}
+function splitName_(full, relation, phone) {
+  var w = String(full || '').trim().split(/\s+/);
+  return { first: w.slice(0, -1).join(' ') || w[0] || '', last: w.length > 1 ? w[w.length - 1] : '', relation: relation || '', phone: String(phone || '') };
+}
+
+// 續報／報名：勾選孩子、項目和年級，加上今年的同意書簽名
 function enroll_(req) {
   var a = auth_(req);
   if (!a) return { ok: false, error: 'auth' };
   if (!isTrue_(a.s['開放報名'])) return { ok: false, error: 'closed' };
   var gm = gradeMap_();
-  var picks = (req.kids || []).filter(function (p) { return p && p.cid && gm[String(p.grade)]; });
+  var picks = (req.kids || []).filter(function (p) { return p && p.cid && gm[String(p.grade)] && programsOf_(p).length; });
   if (!picks.length) return { ok: false, error: 'invalid' };
+  var year = String(a.s['學年']);
+  var fid = a.fam['家庭編號'];
+  var sig = null;
+  if (!signedThisYear_(fid, year)) {
+    sig = parseSignature_(req.signature);
+    if (!sig || !clean_(req.signer)) return { ok: false, error: 'signature' };
+  }
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var year = String(a.s['學年']);
     var mine = {};
-    kidsOfFamily_(a.fam['家庭編號']).forEach(function (k) { mine[k['孩子編號']] = k; });
-    var enrolled = enrollMap_(year);
+    kidsOfFamily_(fid).forEach(function (k) { mine[k['孩子編號']] = k; });
+    if (sig) saveRelease_(fid, clean_(req.signer), sig, year, '家長專區續報');
     var now = new Date(), added = [];
     picks.forEach(function (p) {
       var k = mine[p.cid];                                        // 只能報自己家的孩子
-      if (!k || enrolled[p.cid]) return;
-      addEnrollment_(k, String(p.grade), year, now, '家長專區續報');
-      added.push({ name: kidName_(k), cls: gm[String(p.grade)] });
+      if (!k) return;
+      var progs = programsOf_(p).filter(function (g) { return !enrollMap_(year, g)[p.cid]; });
+      progs.forEach(function (g) { addEnrollment_(k, String(p.grade), year, g, now, '家長專區續報'); });
+      if (progs.length) added.push({ name: kidName_(k), cls: gm[String(p.grade)], programs: progs });
     });
     if (added.length && isTrue_(a.s['寄確認信'])) sendConfirm_(a.email, added, year);
     return { ok: true, data: familyView_(a), added: added };
   } finally { lock.releaseLock(); }
 }
 
-// 這學年不參加了：報名改成「取消」，孩子資料留著，明年還可以續報
+// 這學年不參加了：把今年的報名改成「取消」，孩子資料留著，明年還可以續報
 function withdraw_(req) {
   var a = auth_(req);
   if (!a) return { ok: false, error: 'auth' };
   var year = String(a.s['學年']);
-  var e = rows_(SHEET.ENROLL).filter(function (r) {
-    return String(r['學年']) === year && r['孩子編號'] === req.cid && r['家庭編號'] === a.fam['家庭編號'] && r['狀態'] === '有效';
-  })[0];
-  if (!e) return { ok: false, error: 'invalid' };
-  e['狀態'] = '取消';
-  e['備註'] = [e['備註'], Utilities.formatDate(new Date(), tz_(a.s), 'M/d') + ' 家長在家長專區取消'].filter(String).join('；');
-  writeRow_(SpreadsheetApp.getActive().getSheetByName(SHEET.ENROLL), SHEET.ENROLL, e);
+  var sheet = SpreadsheetApp.getActive().getSheetByName(SHEET.ENROLL);
+  var hits = rows_(SHEET.ENROLL).filter(function (r) {
+    return String(r['學年']) === year && r['孩子編號'] === req.cid && r['家庭編號'] === a.fam['家庭編號'] && r['狀態'] === '有效' &&
+      (!req.program || r['項目'] === req.program);
+  });
+  if (!hits.length) return { ok: false, error: 'invalid' };
+  var stamp = Utilities.formatDate(new Date(), tz_(a.s), 'M/d') + ' 家長在家長專區取消';
+  hits.forEach(function (e) {
+    e['狀態'] = '取消';
+    e['備註'] = [e['備註'], stamp].filter(String).join('；');
+    writeRow_(sheet, SHEET.ENROLL, e);
+  });
   return { ok: true, data: familyView_(a) };
 }
 
@@ -587,7 +691,8 @@ function saveFamily_(req) {
   if (!a) return { ok: false, error: 'auth' };
   var v = req.family || {};
   var phone = digits_(v.phone);
-  if (!clean_(v.first) || !clean_(v.last) || phone.length < 10 || !clean_(v.emergencyName) || digits_(v.emergencyPhone).length < 10) {
+  var pk = (v.pickups || []).filter(function (x) { return x && clean_(x.first); });
+  if (!clean_(v.first) || !clean_(v.last) || phone.length < 10 || !pk.length || digits_(pk[0].phone).length < 10) {
     return { ok: false, error: 'invalid' };
   }
   var lock = LockService.getScriptLock();
@@ -599,43 +704,70 @@ function saveFamily_(req) {
     if (taken) return { ok: false, error: 'phone_taken' };
     var f = a.fam;
     f['家長 First Name'] = clean_(v.first); f['家長 Last Name'] = clean_(v.last);
+    if (v.relation) f['關係'] = clean_(v.relation);
     f['手機'] = phone; f['手機末四碼'] = phone.slice(-4);
-    f['緊急聯絡人'] = clean_(v.emergencyName); f['緊急聯絡人電話'] = digits_(v.emergencyPhone);
-    f['授權接送人'] = clean_(v.pickup);
+    var vol = f['願意服事'];
+    applyFamilyDetails_(f, { address: v.address, second: v.second, pickups: pk });
+    f['願意服事'] = vol;
     writeRow_(SpreadsheetApp.getActive().getSheetByName(SHEET.FAMILIES), SHEET.FAMILIES, f);
     a.fam = f;
     return { ok: true, data: familyView_(a) };
   } finally { lock.releaseLock(); }
 }
 
-// 修改孩子資料（姓名、過敏；已報名的可以改今年的年級）；沒有 cid 就是新增孩子並報名今年
+/**
+ * 修改孩子資料（姓名、生日、過敏）；今年已報名的可以改年級和項目
+ * 沒有 cid 就是新增孩子並報名今年（今年還沒簽同意書的要一起簽）
+ */
 function saveKid_(req) {
   var a = auth_(req);
   if (!a) return { ok: false, error: 'auth' };
   var v = req.kid || {};
   var gm = gradeMap_();
-  if (!clean_(v.first) || !clean_(v.last)) return { ok: false, error: 'invalid' };
+  if (!clean_(v.first) || !clean_(v.last) || !/^\d{4}-\d{2}-\d{2}$/.test(String(v.birthday || ''))) return { ok: false, error: 'invalid' };
+  var year = String(a.s['學年']);
+  var fid = a.fam['家庭編號'];
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var year = String(a.s['學年']);
     if (!v.cid) {
       if (!isTrue_(a.s['開放報名'])) return { ok: false, error: 'closed' };
-      if (!gm[String(v.grade)]) return { ok: false, error: 'invalid' };
-      addKidsAndEnroll_(a.fam['家庭編號'], [v], year, new Date());
+      if (!validKid_(v)) return { ok: false, error: 'invalid' };
+      if (!signedThisYear_(fid, year)) {
+        var sig = parseSignature_(req.signature);
+        if (!sig || !clean_(req.signer)) return { ok: false, error: 'signature' };
+        saveRelease_(fid, clean_(req.signer), sig, year, '家長專區新增孩子');
+      }
+      addKidsAndEnroll_(fid, [v], year, new Date(), '家長專區新增');
       return { ok: true, data: familyView_(a) };
     }
-    var k = kidsOfFamily_(a.fam['家庭編號']).filter(function (r) { return r['孩子編號'] === v.cid; })[0];
+    var k = kidsOfFamily_(fid).filter(function (r) { return r['孩子編號'] === v.cid; })[0];
     if (!k) return { ok: false, error: 'invalid' };
-    k['First Name'] = clean_(v.first); k['Last Name'] = clean_(v.last); k['過敏/特殊需求'] = clean_(v.notes);
+    k['First Name'] = clean_(v.first); k['Last Name'] = clean_(v.last);
+    k['生日'] = clean_(v.birthday); k['過敏/特殊需求'] = clean_(v.notes);
     writeRow_(SpreadsheetApp.getActive().getSheetByName(SHEET.KIDS), SHEET.KIDS, k);
-    var e = rows_(SHEET.ENROLL).filter(function (r) {
+
+    // 今年已報名：可以改年級、加報或取消某個項目（至少要留一個；全部不上請用「這學年不參加了」）
+    var sheet = SpreadsheetApp.getActive().getSheetByName(SHEET.ENROLL);
+    var cur = rows_(SHEET.ENROLL).filter(function (r) {
       return String(r['學年']) === year && r['孩子編號'] === v.cid && r['狀態'] === '有效';
-    })[0];
-    if (e) {
-      e['孩子姓名'] = kidName_(k);
-      if (v.grade && gm[String(v.grade)]) { e['年級'] = String(v.grade); e['班別'] = gm[String(v.grade)]; }
-      writeRow_(SpreadsheetApp.getActive().getSheetByName(SHEET.ENROLL), SHEET.ENROLL, e);
+    });
+    if (cur.length) {
+      var grade = gm[String(v.grade)] ? String(v.grade) : String(cur[0]['年級']);
+      var want = programsOf_(v);
+      if (!want.length) return { ok: false, error: 'invalid' };
+      cur.forEach(function (e) {
+        e['孩子姓名'] = kidName_(k); e['年級'] = grade; e['班別'] = e['項目'] === 'Awana' ? gm[grade] : '';
+        if (want.indexOf(e['項目']) < 0) {
+          e['狀態'] = '取消';
+          e['備註'] = [e['備註'], Utilities.formatDate(new Date(), tz_(a.s), 'M/d') + ' 家長取消這個項目'].filter(String).join('；');
+        }
+        writeRow_(sheet, SHEET.ENROLL, e);
+      });
+      var have = cur.map(function (e) { return e['項目']; });
+      want.filter(function (p) { return have.indexOf(p) < 0; }).forEach(function (p) {
+        addEnrollment_(k, grade, year, p, new Date(), '家長專區加報');
+      });
     }
     return { ok: true, data: familyView_(a) };
   } finally { lock.releaseLock(); }
@@ -645,7 +777,7 @@ function invite_(req) {
   var a = auth_(req);
   if (!a) return { ok: false, error: 'auth' };
   var email = lc_(req.email);
-  if (!/^\S+@\S+\.\S+$/.test(email)) return { ok: false, error: 'invalid' };
+  if (!validEmail_(email)) return { ok: false, error: 'invalid' };
   var cache = CacheService.getScriptCache();
   if (!bump_(cache, 'inv:' + a.fam['家庭編號'], 5, 3600)) return { ok: false, error: 'too_many' };
   var lock = LockService.getScriptLock();
@@ -725,26 +857,26 @@ function sendRenewalMail_(email, year, names) {
   MailApp.sendEmail({
     to: email,
     subject: 'WCEC Awana ' + year + ' 開放報名 / Registration is open',
-    body: year + ' 學年的 Awana 開放報名了！不用重填表：打開 WCEC App →「家長專區」，勾選要參加的孩子就完成了。\n' + link +
-      '\n\nAwana ' + year + ' registration is open. Open the WCEC app → Parent Area and check the children who will attend.',
-    htmlBody: mailShell_('<h2 style="margin:0 0 8px">Awana ' + year + ' 開放報名了！</h2>' +
+    body: year + ' 學年的 Awana／主日學開放報名了！不用重填表：打開 WCEC App →「家長專區」，勾選要參加的孩子、簽名就完成了。\n' + link +
+      '\n\nAwana / Sunday School ' + year + ' registration is open. Open the WCEC app → Parent Area, check the children who will attend, and sign.',
+    htmlBody: mailShell_('<h2 style="margin:0 0 8px">' + year + ' Awana／主日學開放報名了！</h2>' +
       '<p>' + names.map(clean_).join('、') + '</p>' +
-      '<p>不用重新填表。打開 <b>WCEC App →「家長專區」</b>，勾選今年要參加的孩子，按「送出」就完成了。</p>' +
+      '<p>不用重新填表。打開 <b>WCEC App →「家長專區」</b>，勾選今年要參加的孩子、簽名，就完成了。</p>' +
       mailButton_(link, '前往家長專區 / Parent Area') +
-      '<p style="color:#5a6478">No need to fill out the form again. Open the WCEC app → Parent Area, check the children who will attend, and submit.</p>'),
+      '<p style="color:#5a6478">No need to fill out the form again. Open the WCEC app → Parent Area, check the children who will attend, and sign.</p>'),
   });
 }
 
 function sendConfirm_(email, kids, year) {
   if (!email || kids.length === 0) return;
   try {
-    var list = kids.map(function (k) { return '・' + k.name + (k.cls ? '（' + k.cls + '）' : ''); }).join('\n');
+    var list = kids.map(function (k) { return '・' + k.name + '（' + k.programs.join('、') + '）'; }).join('\n');
     MailApp.sendEmail({
       to: email,
-      subject: 'WCEC Awana ' + year + ' 報名成功 / Registration received',
-      body: '謝謝您報名 WCEC Awana！\nThank you for registering for WCEC Awana!\n\n' + list +
-        '\n\n簽到時，在前台 iPad 輸入您手機號碼的末四碼即可。\n' +
-        'To check in, enter the last 4 digits of your phone number at the front desk iPad.\n\n' +
+      subject: 'WCEC Awana／主日學 ' + year + ' 報名成功 / Registration received',
+      body: '謝謝您報名！\nThank you for registering!\n\n' + list +
+        '\n\nAwana 簽到時，在前台 iPad 輸入您手機號碼的末四碼即可。\n' +
+        'For Awana check-in, enter the last 4 digits of your phone number at the front desk iPad.\n\n' +
         '威明頓主恩堂 兒童事工 / WCEC Children\'s Ministry',
     });
   } catch (err) { console.error('mail failed', err); }
@@ -792,7 +924,7 @@ function lookup_(req) {
       fid: f['家庭編號'],
       label: maskName_(parentName_(f)),
       kids: kids.filter(function (k) { return k.fid === f['家庭編號']; }).map(function (k) {
-        // 注意：過敏資料「不」回傳到簽到站
+        // 注意：過敏、生日都「不」回傳到簽到站
         return { cid: k.cid, name: k.name, cls: k.cls, checkedIn: !!inToday[k.cid] };
       }),
     };
@@ -836,14 +968,14 @@ function checkin_(req) {
   }
 }
 
-// 今年有有效報名的孩子
+// 今年有報 Awana 的孩子（前台簽到站目前只做 Awana）
 function activeKids_(s) {
   var year = String(s['學年']);
   var gm = gradeMap_();
   var kids = {};
   rows_(SHEET.KIDS).forEach(function (k) { if (k['狀態'] !== '停用') kids[k['孩子編號']] = k; });
   return rows_(SHEET.ENROLL).filter(function (e) {
-    return String(e['學年']) === year && e['狀態'] === '有效' && kids[e['孩子編號']];
+    return String(e['學年']) === year && e['項目'] === 'Awana' && e['狀態'] === '有效' && kids[e['孩子編號']];
   }).map(function (e) {
     var k = kids[e['孩子編號']];
     return { cid: k['孩子編號'], fid: k['家庭編號'], name: kidName_(k), cls: e['班別'] || gm[String(e['年級'])] || '' };
@@ -855,6 +987,11 @@ function settings_() {
   var out = {};
   rows_(SHEET.SETTINGS).forEach(function (r) { out[r['項目']] = r['值']; });
   return out;
+}
+function setSetting_(key, value) {
+  var r = rows_(SHEET.SETTINGS).filter(function (x) { return x['項目'] === key; })[0];
+  if (r) setCell_(SHEET.SETTINGS, r._row, '值', value);
+  else SpreadsheetApp.getActive().getSheetByName(SHEET.SETTINGS).appendRow([key, value, '']);
 }
 
 function grades_() {
@@ -869,10 +1006,10 @@ function gradeMap_() {
 function kidsOfFamily_(fid) {
   return rows_(SHEET.KIDS).filter(function (k) { return k['家庭編號'] === fid && k['狀態'] !== '停用'; });
 }
-function enrollMap_(year) {
+function enrollMap_(year, program) {
   var m = {};
   rows_(SHEET.ENROLL).forEach(function (e) {
-    if (String(e['學年']) === String(year) && e['狀態'] === '有效') m[e['孩子編號']] = true;
+    if (String(e['學年']) === String(year) && e['項目'] === program && e['狀態'] === '有效') m[e['孩子編號']] = true;
   });
   return m;
 }
@@ -891,6 +1028,11 @@ function rows_(name) {
   });
 }
 
+function appendObj_(name, obj) {
+  SpreadsheetApp.getActive().getSheetByName(name)
+    .appendRow(HEADERS[name].map(function (h) { return obj[h] === undefined ? '' : obj[h]; }));
+}
+
 function writeRow_(sheet, name, obj) {
   var vals = HEADERS[name].map(function (h) { return obj[h] === undefined ? '' : obj[h]; });
   sheet.getRange(obj._row, 1, 1, vals.length).setValues([vals]);
@@ -906,6 +1048,11 @@ function fullName_(first, last) { return (clean_(first) + ' ' + clean_(last)).tr
 function parentName_(f) { return fullName_(f['家長 First Name'], f['家長 Last Name']); }
 function kidName_(k) { return fullName_(k['First Name'], k['Last Name']); }
 function yearStart_(y) { return parseInt(String(y), 10) || 0; }    // 「2026-27」→ 2026
+function dateOnly_(v) {                                             // 生日一律回傳 yyyy-MM-dd
+  if (v instanceof Date) return Utilities.formatDate(v, tz_(settings_()), 'yyyy-MM-dd');
+  return String(v || '');
+}
+function validEmail_(e) { return /^\S+@\S+\.\S+$/.test(String(e || '').trim()); }
 
 function familyEmails_(f) { return [lc_(f['Email'])].concat(splitEmails_(f['其他家長Email'])).filter(String); }
 function splitEmails_(v) { return String(v || '').split(/[,;\s]+/).map(lc_).filter(String); }
