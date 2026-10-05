@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>同工專區 | WCEC</title>
+<link rel="stylesheet" href="style.css?v=20261005g">
+<link rel="stylesheet" href="ios.css?v=20261005g">
+<style>
+  /* 同工專區：簽到、簽退、收款的入口（App 兒童事工頁右上角的圖示會打開這一頁） */
+  .wrap { max-width: 560px; }
+  .lead { margin: 0 4px 16px; }
+  .tile { display: flex; align-items: center; gap: 16px; width: 100%; text-align: left; background: var(--card); color: var(--ink);
+    border: 0; border-radius: 18px; padding: 18px 14px 18px 16px; margin: 0 0 12px; font: inherit; text-decoration: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .tile:active { transform: scale(.98); }
+  .tile .ic { width: 58px; height: 58px; flex: 0 0 58px; border-radius: 16px; display: grid; place-items: center; }
+  .tile .ic svg { width: 32px; height: 32px; }
+  .tile b { display: block; font-size: 22px; } .tile .d { display: block; color: var(--muted); font-size: 16px; line-height: 1.4; margin-top: 2px; }
+  .tile .chev { margin-left: auto; width: 10px; height: 16px; opacity: .5; flex: 0 0 10px; }
+  .tile.off { opacity: .5; pointer-events: none; }
+  .soon { font-size: 13px; font-weight: 700; background: var(--fill); color: var(--muted); border-radius: 999px; padding: 2px 9px; margin-left: 8px; vertical-align: 4px; }
+  .lockbtn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 22px; background: none; border: 0; color: var(--brand); font: inherit; font-weight: 600; min-height: 48px; }
+  .lockbtn svg { width: 20px; height: 20px; }
+  .note { text-align: center; color: var(--muted); font-size: 15px; margin: 2px 0 0; }
+  .lockcard h2 { margin-top: 0; }
+  .lockcard input { text-align: center; font-size: 24px; letter-spacing: .2em; }
+  .lockcard .btn { width: 100%; margin-top: 14px; }
+  .embed header.top { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="demo/gas-shim.js"></script>
+<script src="common.js?v=20261005g"></script>
+<script>
+(function () {
+  var W = WCEC, t = W.t, esc = W.esc;
+  var app = document.getElementById('app');
+  var key = W.store('wcec_station_key') || '', err = '', busy = false;
+  var CHEV = '<svg class="chev" viewBox="0 0 8 13" aria-hidden="true"><path d="M1 1l5.5 5.5L1 12" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+  function icon(path) { return '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + path + '</svg>'; }
+  var IC = {
+    checkin: icon('<circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7 1.4 0 2.7.4 3.8 1.1"/><path d="M15 19l2 2 5-5"/>'),
+    checkout: icon('<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/>'),
+    pay: icon('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/>'),
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  };
+  var en = W.lang() === 'en';
+  var S = en ? {
+    lead: 'For children\'s ministry staff only.', lockH: 'Staff area', lockP: 'For children\'s ministry staff only (check-in, check-out, payments). Enter the staff password:',
+    lockNote: 'Parents don\'t need this page — your family check-in pass is in the Parent Area.', enter: 'Enter',
+    ci: 'Check-in', ciD: 'Last 4 digits of a parent\'s phone, or scan the family card', co: 'Check-out', coD: 'Confirm who is picking up, then let the child go',
+    soon: 'Coming soon', pay: 'Payments', payD: 'Record Awana donations and uniforms (check / cash)',
+    lock: 'Lock staff area', lockedNote: 'This phone is unlocked. Lock it before lending it to someone else.',
+  } : {
+    lead: '只給兒童事工同工使用。', lockH: '同工專區', lockP: '這裡只給兒童事工同工使用（簽到、簽退、收款）。請輸入同工密碼：',
+    lockNote: '家長不需要進來這裡；家庭簽到卡在「家長專區」。', enter: '進入',
+    ci: '簽到', ciD: '輸入家長手機末四碼，或掃描家庭簽到卡', co: '簽退', coD: '確認接送人後讓孩子離開',
+    soon: '即將推出', pay: '收款', payD: '記錄 Awana 奉獻與制服（支票／現金）',
+    lock: '鎖定同工專區', lockedNote: '這支手機目前已解鎖。借給別人用之前，請先鎖定。',
+  };
+
+  function setTitle() {
+    var title = t('staff_title');
+    document.title = title + ' | WCEC';
+    try { if (window.WCECApp && window.WCECApp.postMessage) window.WCECApp.postMessage(JSON.stringify({ type: 'title', title: title })); } catch (e) {}
+  }
+
+  function render() {
+    setTitle();
+    var h = '<header class="top"><div><h1>' + t('staff_title') + '</h1></div></header>' + W.demoBar();
+    if (err) h += '<div class="banner err" role="alert">' + esc(err) + '</div>';
+    if (!key) {
+      h += '<section class="card lockcard"><h2>' + esc(S.lockH) + '</h2><p>' + esc(S.lockP) + '</p>' +
+        '<input type="password" id="pw" autocomplete="off" aria-label="password">' +
+        '<button class="btn" id="go"' + (busy ? ' disabled' : '') + '>' + esc(busy ? t('ci_checking') : S.enter) + '</button>' +
+        '<p class="hint">' + esc(S.lockNote) + '</p></section>';
+      app.innerHTML = h;
+      var pw = document.getElementById('pw');
+      var go = function () {
+        if (!pw.value || busy) return;
+        var v = pw.value; busy = true; err = ''; render();
+        W.call('unlock', { key: v }).then(function (r) {
+          busy = false;
+          if (r.ok) {
+            key = v; W.store('wcec_station_key', v);
+            // 解鎖時後端會一起回傳名單，先存起來，打開簽到、收款時就不用等
+            if (r.families && r.families.length) W.store('wcec_roster', JSON.stringify({ at: Date.now(), families: r.families, others: r.others || [], showCode: !!r.showCode }));
+          } else err = t('ci_' + r.error) || t('e_network');
+          render();
+        });
+      };
+      document.getElementById('go').onclick = go;
+      pw.onkeydown = function (e) { if (e.key === 'Enter') go(); };
+      if (!W.EMBED) pw.focus();
+      return;
+    }
+    h += '<p class="lead">' + esc(S.lead) + '</p>' +
+      '<a class="tile" href="' + W.link('checkin.html') + '"><span class="ic" style="background:#2f7f86">' + IC.checkin + '</span><span><b>' + esc(S.ci) + '</b><span class="d">' + esc(S.ciD) + '</span></span>' + CHEV + '</a>' +
+      '<div class="tile off" aria-disabled="true"><span class="ic" style="background:#8b6f47">' + IC.checkout + '</span><span><b>' + esc(S.co) + '<span class="soon">' + esc(S.soon) + '</span></b><span class="d">' + esc(S.coD) + '</span></span>' + CHEV + '</div>' +
+      '<a class="tile" href="' + W.link('pay.html') + '"><span class="ic" style="background:#b07a1f">' + IC.pay + '</span><span><b>' + esc(S.pay) + '</b><span class="d">' + esc(S.payD) + '</span></span>' + CHEV + '</a>' +
+      '<button class="lockbtn" id="lock" type="button">' + IC.lock + esc(S.lock) + '</button><p class="note">' + esc(S.lockedNote) + '</p>';
+    app.innerHTML = h;
+    document.getElementById('lock').onclick = function () {
+      key = ''; W.forget('wcec_station_key'); W.forget('wcec_roster'); W.forget('wcec_staff_name'); render();
+    };
+  }
+  render();
+  // 從簽到、收款頁返回時，標題改回「同工專區」，並確認是否已在其他頁鎖定
+  addEventListener('pageshow', function () { key = W.store('wcec_station_key') || ''; render(); });
+})();
+</script>
+</body>
+</html>
