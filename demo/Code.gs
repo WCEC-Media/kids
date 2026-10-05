@@ -984,7 +984,7 @@ function rosterData_(rebuild) {
     if (hit) return JSON.parse(hit);
   }
   var data = buildRoster_();
-  try { cache.put('roster', JSON.stringify(data), 360); } catch (e) {}   // 太大放不進快取就算了
+  if (data.families.length) { try { cache.put('roster', JSON.stringify(data), 360); } catch (e) {} }   // 空名單不放快取；太大放不進快取就算了
   return data;
 }
 

@@ -108,7 +108,7 @@
       ci_lock_title: '簽到站設定', ci_lock_hint: '請同工輸入簽到站密碼', ci_unlock: '解鎖', ci_checking: '確認中…', ci_searching: '查詢中，請稍等…', ci_nf_title: '找不到手機末四碼 {n}', ci_nf_body: '請再確認號碼；也可以試試另一位家長的手機末四碼，或掃描家庭簽到卡。還是找不到，請找同工協助。', ci_ne_title: '{n} 今年還沒報名 Awana', ci_ne_body: '有找到這個家庭，但今年還沒報名 Awana。請找同工協助，或在家長專區幫孩子報名。', ci_roster_ok: '名單已準備好（{n} 個家庭）', ci_roster_wait: '名單準備中…',
       ci_bad_key: '密碼錯誤', ci_locked_out: '錯誤太多次，請 10 分鐘後再試',
       ci_not_configured: '試算表還沒設定簽到站密碼', ci_staff: '同工',
-      ci_relock: '鎖定這台簽到站', ci_scan_hint: '把卡片上的 QR code 對準鏡頭', ci_cam_err: '無法開啟相機',
+      ci_relock: '鎖定這台簽到站', ci_relock_body: '鎖定後要再輸入簽到站密碼才能使用。請輸入密碼確認：', ci_wrong_pw: '密碼不對', ci_cancel: '取消', ci_scan_hint: '把卡片上的 QR code 對準鏡頭', ci_cam_err: '無法開啟相機',
     },
     en: {
       lang_btn: '中文', cancel: 'Cancel', close: 'Close', back: 'Back', required: 'required',
@@ -207,7 +207,7 @@
       ci_lock_title: 'Station setup', ci_lock_hint: 'Staff: enter the station password', ci_unlock: 'Unlock', ci_checking: 'Checking…', ci_searching: 'Looking up, one moment…', ci_nf_title: 'No family found for {n}', ci_nf_body: 'Please check the number, try the other parent\'s phone, or scan the family card. Still not found? Please ask a staff member.', ci_ne_title: '{n} isn\'t registered for Awana this year', ci_ne_body: 'We found this family, but no child is registered for Awana this year. Please ask a staff member, or register in the Parent Area.', ci_roster_ok: 'List ready ({n} families)', ci_roster_wait: 'Preparing list…',
       ci_bad_key: 'Wrong password', ci_locked_out: 'Too many tries. Wait 10 minutes.',
       ci_not_configured: 'Station password is not set in the spreadsheet', ci_staff: 'Staff',
-      ci_relock: 'Lock this station', ci_scan_hint: 'Hold the QR code up to the camera', ci_cam_err: 'Could not open the camera',
+      ci_relock: 'Lock this station', ci_relock_body: 'After locking, the station password is needed again. Enter the password to confirm:', ci_wrong_pw: 'Wrong password', ci_cancel: 'Cancel', ci_scan_hint: 'Hold the QR code up to the camera', ci_cam_err: 'Could not open the camera',
     },
   };
 
@@ -400,9 +400,13 @@
         .then(function () { return window.WCEC_DEMO.call(body); })
         .catch(function (e) { console.error(e); return { ok: false, error: 'server_error' }; });
     }
-    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+    // 最多等 25 秒：後端偶爾會卡住，不能讓畫面永遠停在「讀取中」
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, 25000) : null;
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body), signal: ctl ? ctl.signal : undefined })
       .then(function (r) { return r.json(); })
-      .catch(function () { return { ok: false, error: 'network' }; });
+      .catch(function () { return { ok: false, error: 'network' }; })
+      .then(function (r) { clearTimeout(timer); return r; });
   }
   function errText(code) { return t('e_' + (code || 'network')) || t('e_server_error'); }
 

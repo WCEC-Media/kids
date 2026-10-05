@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Awana 簽到 | WCEC</title>
-<link rel="stylesheet" href="style.css?v=20261005d">
+<link rel="stylesheet" href="style.css?v=20261005e">
 <style>
   body { font-size: 22px; }
   .wrap { max-width: 900px; }
@@ -41,7 +41,6 @@
   .rstat { color: var(--muted); font-size: 16px; margin-top: 18px; }
   .spinner.sm { width: 16px; height: 16px; border-width: 3px; }
   /* 在 App 裡（手機）：App 有自己的返回鍵，藏起右下角的同工鍵；手機畫面縮小字級 */
-  .embed .staff { display: none; }
   @media (max-width: 520px) {
     body { font-size: 19px; }
     h1 { font-size: 26px; }
@@ -60,7 +59,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261005d"></script>
+<script src="common.js?v=20261005e"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -71,11 +70,13 @@
   var idleTimer = null, countdown = 0, cdTimer = null, scanner = null;
   // 名單快取：解鎖後先下載今年的家庭和孩子，輸入末四碼時直接在這台裝置上找，不用等網路
   // 名單：存在這台簽到裝置上（只有孩子姓名、班別、末四碼），打開就能查；背景再跟後端更新
-  var roster = null, rosterAt = 0, showCode = false, others = [], notFound = null, rosterReq = null;
+  var roster = null, rosterAt = 0, showCode = false, others = [], notFound = null, rosterReq = null, reqId = 0;
   function useRoster(r, at) {
     roster = r.families || []; others = r.others || []; showCode = !!r.showCode; rosterAt = at || Date.now();
   }
   function saveRoster(r) {
+    // 保險：已經有名單時，後端回傳空名單就不要覆蓋（避免名單突然變成 0 個家庭）
+    if (roster && roster.length && !(r.families && r.families.length)) return;
     useRoster(r);
     W.store('wcec_roster', JSON.stringify({ at: rosterAt, families: roster, others: others, showCode: showCode }));
     if (view === 'home') render();
@@ -159,7 +160,7 @@
         '<p>' + esc(t(notFound.enrolled ? 'ci_nf_body' : 'ci_ne_body')) + '</p></div>' : '';
       var st = '<p class="rstat">' + (roster ? '✓ ' + esc(t('ci_roster_ok', { n: roster.length })) : '<span class="spinner sm"></span> ' + esc(t('ci_roster_wait'))) + '</p>';
       return '<section class="center">' + nf + '<h2>' + t('ci_enter') + '</h2>' + pinBoxes(4) +
-        (busy ? '<div class="searching"><span class="spinner"></span> ' + esc(t('ci_searching')) + '</div>' : '') +
+        (busy ? '<div class="searching"><span class="spinner"></span> ' + esc(t('ci_searching')) + ' <button type="button" class="btn ghost small" id="cancelq">' + t('ci_cancel') + '</button></div>' : '') +
         '<div class="' + (busy ? 'dim' : '') + '">' + pad() + '</div>' +
         '<div class="actions"><button class="btn ghost" id="scan"' + (busy ? ' disabled' : '') + '>📷 ' + t('ci_scan') + '</button></div>' + st + '</section>';
     },
@@ -212,6 +213,8 @@
     home: function () {
       bindPad(4, function () { via = 'phone'; lookup({ last4: digits }); });
       document.getElementById('scan').onclick = function () { go('scan'); startScan(); };
+      var cq = document.getElementById('cancelq');
+      if (cq) cq.onclick = function () { reqId++; busy = false; digits = ''; render(); };
     },
     scan: function () { document.getElementById('back').onclick = reset; },
     families: function () {
@@ -244,27 +247,30 @@
   }
   function lookup(q) {
     digits = '';
-    // 1. 這台裝置上有名單：直接找，立刻出結果
-    if (roster) {
+    // 1. 這台裝置上有名單：直接找，立刻出結果（找不到就直接說找不到，背景更新名單，剛報名的家庭再輸入一次就有）
+    if (roster && roster.length) {
       families = localFind(q);
-      // 找不到而且名單有點舊（可能是剛報名的新家庭）：再跟後端確認一次
-      if (families.length || Date.now() - rosterAt < 2 * 60 * 1000) return showFamilies(q);
+      if (!families.length && Date.now() - rosterAt > 60000) loadRoster();
+      return showFamilies(q);
     }
     // 2. 名單正在下載：等它下載完再找，不另外查詢
-    if (!roster && rosterReq) {
+    if (rosterReq) {
+      var my = ++reqId;
       busy = true; render();
       rosterReq.then(function () {
+        if (my !== reqId) return;   // 已經按了取消
         busy = false;
-        if (roster) { families = localFind(q); showFamilies(q); } else serverLookup(q);
+        if (roster && roster.length) { families = localFind(q); showFamilies(q); } else serverLookup(q);
       });
       return;
     }
     serverLookup(q);
   }
   function serverLookup(q) {
+    var my = ++reqId;
     busy = true; render();
-    loadRoster();   // 順便更新名單
     W.call('lookup', Object.assign({ key: key }, q)).then(function (r) {
+      if (my !== reqId) return;   // 已經按了取消
       busy = false; digits = '';
       if (!r.ok && r.error === 'not_enrolled') { notFound = { n: q.last4 || 'QR', enrolled: false }; view = 'home'; render(); return; }
       if (!r.ok) return handleErr(r);
@@ -316,8 +322,19 @@
   document.getElementById('lang').onclick = function () { W.setLang(W.lang() === 'en' ? 'zh' : 'en'); render(); };
   document.getElementById('staff').onclick = function () {
     if (view === 'locked') return;
-    var pw = prompt(t('ci_lock_hint'));
-    if (pw !== null && pw === key && confirm(t('ci_relock') + '?')) { key = ''; W.forget('wcec_station_key'); forgetRoster(); reset(); }
+    // App 裡不能用 prompt()/confirm()，改用網頁自己的對話框
+    W.dialog({
+      title: t('ci_relock'),
+      body: '<p>' + t('ci_relock_body') + '</p><input type="password" id="relockpw" autocomplete="off" style="text-align:center;font-size:24px"><p class="msg" id="relockerr" style="display:none"></p>',
+      actions: [
+        { label: t('ci_relock'), onClick: function (close, el) {
+          var v = el.querySelector('#relockpw').value;
+          if (v !== key) { var m = el.querySelector('#relockerr'); m.textContent = t('ci_wrong_pw'); m.style.display = 'block'; return true; }
+          close(); key = ''; W.forget('wcec_station_key'); forgetRoster(); reset();
+        } },
+        { label: t('ci_cancel'), kind: 'ghost' },
+      ],
+    });
   };
 
   render();
