@@ -148,7 +148,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261004e"></script>
+<script src="common.js?v=20261004f"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -310,7 +310,7 @@
       }).catch(function () {});
       var eb = document.getElementById('enrollBtn'); if (eb) eb.onclick = enrollSheet;
       var ak = document.getElementById('addKid'); if (ak) ak.onclick = function () { kidSheet(null); };
-      app.querySelectorAll('[data-kid]').forEach(function (b) { b.onclick = function () { kidSheet(data.kids[+b.getAttribute('data-kid')]); }; });
+      app.querySelectorAll('[data-kid]').forEach(function (b) { b.onclick = function () { kidView(data.kids[+b.getAttribute('data-kid')]); }; });
       app.querySelectorAll('[data-contact]').forEach(function (b) { b.onclick = function () { contactSheet(); }; });
       app.querySelectorAll('[data-rm]').forEach(function (b) {
         b.onclick = function () {
@@ -357,7 +357,7 @@
   // ─── 表單頁 ───
   var sheet = document.getElementById('sheet'), scrim = document.getElementById('scrim');
   function openSheet(o) {
-    sheet.innerHTML = '<div class="grab"></div><div class="bar"><button type="button" data-x>' + t('p_cancel') + '</button><b>' + esc(o.title) + '</b>' +
+    sheet.innerHTML = '<div class="grab"></div><div class="bar"><button type="button" data-x>' + esc(o.cancel || t('p_cancel')) + '</button><b>' + esc(o.title) + '</b>' +
       '<button type="button" class="done" data-save>' + esc(o.save || t('p_save')) + '</button></div><div class="scroll"><div class="err" data-err hidden></div>' + o.body + '</div>';
     sheet.classList.add('on'); scrim.classList.add('on'); document.body.style.overflow = 'hidden';
     sheet.querySelector('[data-x]').onclick = closeSheet;
@@ -480,7 +480,30 @@
   }
 
   // 孩子資料（新增或修改）
-  function kidSheet(k) {
+  // 孩子資料：先查看（只顯示），右上角「編輯」才進到編輯畫面
+  function kidView(k) {
+    var en = W.lang() === 'en', d = data;
+    function fmtBday(b) {
+      var p = W.dobParts(b); if (!p.y) return '—';
+      return en ? ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+p.m - 1] + ' ' + p.d + ', ' + p.y : p.y + ' 年 ' + p.m + ' 月 ' + p.d + ' 日';
+    }
+    var status = k.enrolled ? '<span class="badge ok">✓ ' + t('st_enrolled', { year: esc(d.year) }) + '</span>'
+      : k.graduated ? '<span class="badge no">' + t('st_grad') + '</span>'
+      : '<span class="badge no">' + t('st_not', { year: esc(d.year) }) + '</span>';
+    var body = '<div class="group"><div class="row"><span class="avatar" style="background:' + color(k.name) + '">' + esc(initials(k)) + '</span>' +
+      '<span class="grow"><div class="name">' + esc(k.name) + '</div>' + status + '</span></div></div>' +
+      '<div class="gh"></div><div class="group">' +
+      rowStatic(t('birthday'), esc(fmtBday(k.birthday))) +
+      (k.enrolled ? rowStatic(t('p_grade_this'), esc(W.gradeLabel(k.grade)) + (k.cls ? ' · ' + esc(k.cls) : '')) +
+        rowStatic(t('p_programs_this'), esc(k.programs.map(W.programLabel).join('、'))) : '') +
+      (k.lastGrade ? rowStatic(en ? 'Last year' : '去年', esc(W.gradeLabel(k.lastGrade)) + (k.lastPrograms && k.lastPrograms.length ? ' · ' + esc(k.lastPrograms.map(W.programLabel).join('、')) : '')) : '') +
+      '</div>' +
+      '<div class="gh">' + t('pz_notes') + '</div><div class="group"><div class="row"><span class="grow" style="overflow-wrap:anywhere">' + (k.notes ? esc(k.notes).replace(/\n/g, '<br>') : '—') + '</span></div></div>' +
+      '<p class="gf">' + t('notes_hint') + '</p>';
+    openSheet({ title: k.name, cancel: en ? 'Done' : '完成', save: t('p_edit'), body: body, onSave: function () { kidSheet(k, true); } });
+  }
+
+  function kidSheet(k, fromView) {
     var isNew = !k, enrolled = k && k.enrolled;
     var progs = k ? k.programs : ['Awana'];
     var body = '<div class="gh">' + (W.lang() === 'en' ? 'Name' : '姓名') + '</div><div class="group">' +
@@ -499,6 +522,7 @@
     openSheet({
       title: k ? k.name : t('p_add_kid'), save: isNew ? t('p_submit') : t('p_save'), body: body,
       onOpen: function (el) {
+        if (fromView) el.querySelector('[data-x]').onclick = function () { kidView(k); };   // 取消就回到查看頁
         bindToggles(el); if (isNew) setupPad(el);
         var wd = el.querySelector('#wd');
         if (wd) wd.onclick = function () {
