@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Awana 簽到 | WCEC</title>
-<link rel="stylesheet" href="style.css?v=20261005c">
+<link rel="stylesheet" href="style.css?v=20261005d">
 <style>
   body { font-size: 22px; }
   .wrap { max-width: 900px; }
@@ -60,7 +60,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261005c"></script>
+<script src="common.js?v=20261005d"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -70,13 +70,28 @@
   var digits = '', families = [], fam = null, picked = {}, done = null, err = '', busy = false, via = 'phone';
   var idleTimer = null, countdown = 0, cdTimer = null, scanner = null;
   // 名單快取：解鎖後先下載今年的家庭和孩子，輸入末四碼時直接在這台裝置上找，不用等網路
-  var roster = null, rosterAt = 0, showCode = false, others = [], notFound = null;
+  // 名單：存在這台簽到裝置上（只有孩子姓名、班別、末四碼），打開就能查；背景再跟後端更新
+  var roster = null, rosterAt = 0, showCode = false, others = [], notFound = null, rosterReq = null;
+  function useRoster(r, at) {
+    roster = r.families || []; others = r.others || []; showCode = !!r.showCode; rosterAt = at || Date.now();
+  }
+  function saveRoster(r) {
+    useRoster(r);
+    W.store('wcec_roster', JSON.stringify({ at: rosterAt, families: roster, others: others, showCode: showCode }));
+    if (view === 'home') render();
+  }
+  function forgetRoster() { roster = null; others = []; rosterAt = 0; W.forget('wcec_roster'); }
+  if (key) { try { var saved = JSON.parse(W.store('wcec_roster') || 'null'); if (saved && saved.families) useRoster(saved, saved.at); } catch (e) {} }
   function loadRoster() {
-    if (!key) return;
-    W.call('roster', { key: key }).then(function (r) {
-      if (r.ok) { roster = r.families; others = r.others || []; rosterAt = Date.now(); showCode = !!r.showCode; if (view === 'home') render(); }
+    if (!key) return Promise.resolve(null);
+    if (rosterReq) return rosterReq;
+    rosterReq = W.call('roster', { key: key }).then(function (r) {
+      rosterReq = null;
+      if (r.ok) saveRoster(r);
       else if (r.error === 'bad_key' || r.error === 'not_configured') handleErr(r);
+      return r;
     });
+    return rosterReq;
   }
   loadRoster();
   setInterval(loadRoster, 2 * 60 * 1000);   // 每 2 分鐘更新一次（新報名的孩子、別台簽到的紀錄）
@@ -186,7 +201,7 @@
         busy = true; var v = pw.value; render();
         W.call('unlock', { key: v }).then(function (r) {
           busy = false;
-          if (r.ok) { key = v; W.store('wcec_station_key', v); loadRoster(); go('home'); }
+          if (r.ok) { key = v; W.store('wcec_station_key', v); if (r.families) saveRoster(r); else loadRoster(); go('home'); }
           else { err = t('ci_' + r.error) || t('e_network'); render(); }
         });
       };
@@ -214,22 +229,41 @@
   };
 
   function handleErr(r) {
-    if (r.error === 'bad_key' || r.error === 'not_configured') { key = ''; W.forget('wcec_station_key'); view = 'locked'; }
+    if (r.error === 'bad_key' || r.error === 'not_configured') { key = ''; W.forget('wcec_station_key'); forgetRoster(); view = 'locked'; }
     err = t('ci_' + r.error) || t('e_network');
     render();
   }
 
+  function localFind(q) {
+    return roster.filter(function (f) { return q.qr ? f.qr && f.qr === String(q.qr).trim() : f.last4 === q.last4; })
+      .map(function (f) { return { fid: f.fid, label: f.label, kids: f.kids.map(function (k) { return Object.assign({}, k); }) }; });
+  }
+  function showFamilies(q) {
+    if (!families.length) { if (q.qr) err = t('ci_none'); else notFound = { n: q.last4, enrolled: others.indexOf(q.last4) < 0 }; view = 'home'; render(); return; }
+    if (families.length === 1) pickFamily(families[0]); else go('families');
+  }
   function lookup(q) {
-    // 名單是 15 分鐘內下載的就直接在本機找（立刻出結果）
-    if (roster && Date.now() - rosterAt < 15 * 60 * 1000) {
-      digits = '';
-      families = roster.filter(function (f) { return q.qr ? f.qr && f.qr === String(q.qr).trim() : f.last4 === q.last4; })
-        .map(function (f) { return { fid: f.fid, label: f.label, kids: f.kids.map(function (k) { return Object.assign({}, k); }) }; });
-      if (!families.length) { if (q.qr) err = t('ci_none'); else notFound = { n: q.last4, enrolled: others.indexOf(q.last4) < 0 }; view = 'home'; render(); return; }
-      if (families.length === 1) pickFamily(families[0]); else go('families');
+    digits = '';
+    // 1. 這台裝置上有名單：直接找，立刻出結果
+    if (roster) {
+      families = localFind(q);
+      // 找不到而且名單有點舊（可能是剛報名的新家庭）：再跟後端確認一次
+      if (families.length || Date.now() - rosterAt < 2 * 60 * 1000) return showFamilies(q);
+    }
+    // 2. 名單正在下載：等它下載完再找，不另外查詢
+    if (!roster && rosterReq) {
+      busy = true; render();
+      rosterReq.then(function () {
+        busy = false;
+        if (roster) { families = localFind(q); showFamilies(q); } else serverLookup(q);
+      });
       return;
     }
+    serverLookup(q);
+  }
+  function serverLookup(q) {
     busy = true; render();
+    loadRoster();   // 順便更新名單
     W.call('lookup', Object.assign({ key: key }, q)).then(function (r) {
       busy = false; digits = '';
       if (!r.ok && r.error === 'not_enrolled') { notFound = { n: q.last4 || 'QR', enrolled: false }; view = 'home'; render(); return; }
@@ -283,7 +317,7 @@
   document.getElementById('staff').onclick = function () {
     if (view === 'locked') return;
     var pw = prompt(t('ci_lock_hint'));
-    if (pw !== null && pw === key && confirm(t('ci_relock') + '?')) { key = ''; W.forget('wcec_station_key'); reset(); }
+    if (pw !== null && pw === key && confirm(t('ci_relock') + '?')) { key = ''; W.forget('wcec_station_key'); forgetRoster(); reset(); }
   };
 
   render();

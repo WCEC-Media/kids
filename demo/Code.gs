@@ -77,7 +77,7 @@ function onOpen() {
 }
 
 // Apps Script 太久沒人用會「睡著」，第一個人要等十幾秒。每 5 分鐘喚醒一次，家長和簽到站就不用等那麼久
-function keepWarm() { settings_(); }
+function keepWarm() { rosterData_(true); }   // 順便把簽到站名單整理好放進快取
 function installKeepWarm() {
   ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === 'keepWarm') ScriptApp.deleteTrigger(tr); });
   ScriptApp.newTrigger('keepWarm').timeBased().everyMinutes(5).create();
@@ -434,7 +434,7 @@ function addEnrollment_(k, grade, year, program, now, note) {
     writeRow_(sheet, SHEET.ENROLL, old);
     return;
   }
-  dirty_();
+  written_();
   sheet.appendRow([String(year), program, k['孩子編號'], k['家庭編號'], kidName_(k), grade, cls, now, '有效', note || '']);
 }
 
@@ -449,7 +449,7 @@ function saveRelease_(fid, signer, b64, year, source) {
   var now = new Date();
   var name = year + '_' + fid + '_' + Utilities.formatDate(now, tz_(settings_()), 'yyyyMMdd-HHmm') + '.png';
   var file = signatureFolder_().createFile(Utilities.newBlob(Utilities.base64Decode(b64), 'image/png', name));
-  dirty_();
+  written_();
   SpreadsheetApp.getActive().getSheetByName(SHEET.RELEASE).appendRow([String(year), fid, signer, file.getUrl(), now, source]);
 }
 
@@ -933,7 +933,7 @@ function checkStation_(req) {
 
 function unlock_(req) {
   var err = checkStation_(req);
-  return err ? { ok: false, error: err } : { ok: true };
+  return err ? { ok: false, error: err } : Object.assign({ ok: true }, rosterData_());   // 解鎖時順便帶回名單
 }
 
 function lookup_(req) {
@@ -973,6 +973,22 @@ function lookup_(req) {
 function roster_(req) {
   var err = checkStation_(req);
   if (err) return { ok: false, error: err };
+  return Object.assign({ ok: true }, rosterData_());
+}
+
+// 名單整理一次放在快取 6 分鐘（keepWarm 每 5 分鐘會重新整理；有人報名、簽到時會清掉）
+function rosterData_(rebuild) {
+  var cache = CacheService.getScriptCache();
+  if (!rebuild) {
+    var hit = cache.get('roster');
+    if (hit) return JSON.parse(hit);
+  }
+  var data = buildRoster_();
+  try { cache.put('roster', JSON.stringify(data), 360); } catch (e) {}   // 太大放不進快取就算了
+  return data;
+}
+
+function buildRoster_() {
   var s = settings_();
   var today = todayStr_(s);
   var inToday = {};
@@ -988,7 +1004,7 @@ function roster_(req) {
   var others = rows_(SHEET.FAMILIES).filter(function (f) { return !byFam[f['家庭編號']]; }).map(function (f) {
     return digits_(f['手機']).slice(-4) || ('0000' + String(f['手機末四碼'] || '')).slice(-4);
   });
-  return { ok: true, families: out, others: others, showCode: isTrue_(s['顯示接送碼']) };
+  return { families: out, others: others, showCode: isTrue_(s['顯示接送碼']) };
 }
 
 function checkin_(req) {
@@ -1018,7 +1034,7 @@ function checkin_(req) {
     var done = [];
     kids.forEach(function (k) {
       if (!already[k.cid]) {
-        dirty_();
+        written_();
         sh.appendRow([today, k.cid, k.name, k.cls, req.fid, now, req.via === 'qr' ? 'QR卡' : '末四碼', code, '', '']);
       }
       done.push({ name: k.name, cls: k.cls });
@@ -1050,7 +1066,7 @@ function settings_() {
   return out;
 }
 function setSetting_(key, value) {
-  dirty_();
+  written_();
   var r = rows_(SHEET.SETTINGS).filter(function (x) { return x['項目'] === key; })[0];
   if (r) setCell_(SHEET.SETTINGS, r._row, '值', value);
   else SpreadsheetApp.getActive().getSheetByName(SHEET.SETTINGS).appendRow([key, value, '']);
@@ -1079,6 +1095,8 @@ function enrollMap_(year, program) {
 // 同一次請求裡同一張工作表只讀一次（讀試算表很慢）；有寫入就清掉重讀
 var _MEMO = {};
 function dirty_() { _MEMO = {}; }
+// 有寫入：清掉這次請求的暫存，也清掉簽到站名單的快取（下次重新整理）
+function written_() { _MEMO = {}; CacheService.getScriptCache().remove('roster'); }
 function rows_(name) {
   if (_MEMO[name]) return _MEMO[name].slice();
   var out = readRows_(name);
@@ -1100,19 +1118,19 @@ function readRows_(name) {
 }
 
 function appendObj_(name, obj) {
-  dirty_();
+  written_();
   SpreadsheetApp.getActive().getSheetByName(name)
     .appendRow(HEADERS[name].map(function (h) { return obj[h] === undefined ? '' : obj[h]; }));
 }
 
 function writeRow_(sheet, name, obj) {
-  dirty_();
+  written_();
   var vals = HEADERS[name].map(function (h) { return obj[h] === undefined ? '' : obj[h]; });
   sheet.getRange(obj._row, 1, 1, vals.length).setValues([vals]);
 }
 
 function setCell_(name, row, header, value) {
-  dirty_();
+  written_();
   var sh = SpreadsheetApp.getActive().getSheetByName(name);
   var col = HEADERS[name].indexOf(header) + 1;
   sh.getRange(row, col).setValue(value);
