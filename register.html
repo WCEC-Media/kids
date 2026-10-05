@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Awana／主日學報名 | WCEC</title>
-<link rel="stylesheet" href="style.css?v=20261004d">
-<link rel="stylesheet" href="ios.css?v=20261004d">
+<link rel="stylesheet" href="style.css?v=20261004e">
+<link rel="stylesheet" href="ios.css?v=20261004e">
 </head>
 <body>
 <div class="wrap" id="app" aria-live="polite"></div>
@@ -16,7 +16,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261004d"></script>
+<script src="common.js?v=20261004e"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -202,6 +202,8 @@
   render = function () {
     var a = document.activeElement, id = a && a.id, pos = a && a.selectionStart;
     _render();
+    // 下拉選單不要重新 focus：iPhone 上 focus 下拉選單會再打開一次選單（要點兩次的原因）
+    if (a && !(a.tagName === 'TEXTAREA' || (a.tagName === 'INPUT' && a.type !== 'checkbox' && a.type !== 'radio'))) id = '';
     if (id && id !== 'next' && id !== 'prev') { var el = document.getElementById(id); if (el) { el.focus(); try { if (pos != null) el.setSelectionRange(pos, pos); } catch (e) {} } }
   };
 
