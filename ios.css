@@ -93,3 +93,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--b
 /* 鍵盤打開時藏起底部按鈕列，留出捲動空間 */
 .typing .navbar { display: none; }
 .typing .wrap { padding-bottom: 50vh; }
+
+/* 奉獻與制服說明 */
+.card.fee p { margin: 6px 0; font-size: 17px; }
+.card.fee b { font-size: 20px; }

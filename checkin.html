@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Awana 簽到 | WCEC</title>
-<link rel="stylesheet" href="style.css?v=20261005e">
+<link rel="stylesheet" href="style.css?v=20261005f">
 <style>
   body { font-size: 22px; }
   .wrap { max-width: 900px; }
@@ -39,6 +39,18 @@
   .searching { display: flex; align-items: center; justify-content: center; gap: 12px; font-weight: 700; color: var(--brand); margin: -6px 0 14px; }
   .dim { opacity: .35; pointer-events: none; }
   .rstat { color: var(--muted); font-size: 16px; margin-top: 18px; }
+  .seg { display: inline-flex; background: var(--brand-soft); border-radius: 14px; padding: 4px; gap: 4px; margin: 0 0 16px; }
+  .seg button { border: 0; background: none; font: inherit; font-weight: 700; color: var(--ink); padding: 10px 22px; border-radius: 10px; min-height: 48px; cursor: pointer; }
+  .seg button.on { background: var(--card); color: var(--brand); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .seg button[disabled] { opacity: .4; }
+  .seg.sm { display: flex; } .seg.sm button { flex: 1; }
+  .paybox { max-width: 560px; margin: 0 auto; }
+  .paybox h2 { margin-bottom: 4px; } .paybox h3 { margin: 24px 0 4px; }
+  .paybox .meta { color: var(--muted); font-size: 18px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 0 4px; }
+  .stats div { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; text-align: center; }
+  .stats span { display: block; font-size: 15px; color: var(--muted); } .stats b { font-size: 26px; }
+  .recs { list-style: none; padding: 0; margin: 8px 0; } .recs li { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 18px; }
   .spinner.sm { width: 16px; height: 16px; border-width: 3px; }
   /* 在 App 裡（手機）：App 有自己的返回鍵，藏起右下角的同工鍵；手機畫面縮小字級 */
   @media (max-width: 520px) {
@@ -59,7 +71,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261005e"></script>
+<script src="common.js?v=20261005f"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -67,6 +79,7 @@
   var key = W.store('wcec_station_key') || '';
   var view = key ? 'home' : 'locked';
   var digits = '', families = [], fam = null, picked = {}, done = null, err = '', busy = false, via = 'phone';
+  var mode = 'checkin', pay = null, payForm = { item: '奉獻', kid: '', amount: '', method: '', check: '', note: '' };
   var idleTimer = null, countdown = 0, cdTimer = null, scanner = null;
   // 名單快取：解鎖後先下載今年的家庭和孩子，輸入末四碼時直接在這台裝置上找，不用等網路
   // 名單：存在這台簽到裝置上（只有孩子姓名、班別、末四碼），打開就能查；背景再跟後端更新
@@ -99,12 +112,13 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden && Date.now() - rosterAt > 60000) loadRoster(); });
 
   function go(v) { view = v; err = ''; render(); }
-  function reset() { notFound = null; digits = ''; families = []; fam = null; picked = {}; done = null; stopScan(); go(key ? 'home' : 'locked'); }
+  function reset() { mode = 'checkin'; pay = null; notFound = null; digits = ''; families = []; fam = null; picked = {}; done = null; stopScan(); go(key ? 'home' : 'locked'); }
 
   // 沒人操作 60 秒就回首頁，避免下一位看到上一家的孩子
   function touch() {
     clearTimeout(idleTimer);
     if (view === 'families' || view === 'kids' || view === 'scan') idleTimer = setTimeout(reset, 60000);
+    if (view === 'pay' || (view === 'home' && mode === 'pay')) idleTimer = setTimeout(reset, 3 * 60000);   // 收款畫面 3 分鐘沒動作也回到簽到
   }
   document.addEventListener('pointerdown', touch);
 
@@ -159,7 +173,9 @@
       var nf = notFound ? '<div class="nf" role="alert"><b>' + esc(t(notFound.enrolled ? 'ci_nf_title' : 'ci_ne_title', { n: notFound.n || 'QR' })) + '</b>' +
         '<p>' + esc(t(notFound.enrolled ? 'ci_nf_body' : 'ci_ne_body')) + '</p></div>' : '';
       var st = '<p class="rstat">' + (roster ? '✓ ' + esc(t('ci_roster_ok', { n: roster.length })) : '<span class="spinner sm"></span> ' + esc(t('ci_roster_wait'))) + '</p>';
-      return '<section class="center">' + nf + '<h2>' + t('ci_enter') + '</h2>' + pinBoxes(4) +
+      var tabs = '<div class="seg" role="tablist"><button type="button" data-mode="checkin" class="' + (mode === 'checkin' ? 'on' : '') + '">' + t('pay_tab_ci') + '</button>' +
+        '<button type="button" data-mode="pay" class="' + (mode === 'pay' ? 'on' : '') + '">💵 ' + t('pay_tab_pay') + '</button></div>';
+      return '<section class="center">' + tabs + nf + '<h2>' + t(mode === 'pay' ? 'pay_enter' : 'ci_enter') + '</h2>' + pinBoxes(4) +
         (busy ? '<div class="searching"><span class="spinner"></span> ' + esc(t('ci_searching')) + ' <button type="button" class="btn ghost small" id="cancelq">' + t('ci_cancel') + '</button></div>' : '') +
         '<div class="' + (busy ? 'dim' : '') + '">' + pad() + '</div>' +
         '<div class="actions"><button class="btn ghost" id="scan"' + (busy ? ' disabled' : '') + '>📷 ' + t('ci_scan') + '</button></div>' + st + '</section>';
@@ -173,6 +189,33 @@
         return '<button class="choice" data-f="' + i + '"><b>' + f.kids.map(function (k) { return esc(k.name); }).join('、') + '</b>' +
           '<div class="who">' + esc(f.label) + '</div></button>';
       }).join('') + '<div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button></div></section>';
+    },
+    pay: function () {
+      if (!pay) return '<section class="center"><p><span class="spinner"></span> ' + t('pay_loading') + '</p></section>';
+      var d = 0, u = 0;
+      pay.records.forEach(function (r) { if (r.item === '制服') u += r.amount; else d += r.amount; });
+      var fm = payForm, uniKids = pay.kids.filter(function (k) { return k.uniform; });
+      var h = '<section class="paybox"><h2>' + esc(pay.family) + '</h2>' +
+        '<p class="meta">' + pay.kids.map(function (k) { return esc(k.name) + ' · ' + esc(k.cls) + (k.uniform ? '（' + t('pay_uniform') + ' $' + k.uniform + '）' : ''); }).join('<br>') + '</p>' +
+        '<div class="stats"><div><span>' + t('pay_sug') + '</span><b>$' + pay.suggested + '</b></div><div><span>' + t('pay_got_d') + '</span><b>$' + d + '</b></div><div><span>' + t('pay_got_u') + '</span><b>$' + u + '</b></div></div>' +
+        '<h3>' + t('pay_new_h') + '</h3>' +
+        '<label class="f">' + t('pay_item') + '</label><div class="seg sm"><button type="button" data-item="奉獻" class="' + (fm.item === '奉獻' ? 'on' : '') + '">' + t('pay_donation') + '</button>' +
+        '<button type="button" data-item="制服" class="' + (fm.item === '制服' ? 'on' : '') + '"' + (uniKids.length ? '' : ' disabled') + '>' + t('pay_uniform') + '</button></div>' +
+        (fm.item === '制服' ? '<label class="f" for="pkid">' + t('pay_kid') + '</label><select id="pkid">' + uniKids.map(function (k) {
+          return '<option value="' + esc(k.name) + '"' + (fm.kid === k.name ? ' selected' : '') + '>' + esc(k.name) + ' · ' + esc(k.cls) + ' $' + k.uniform + '</option>'; }).join('') + '</select>' : '') +
+        '<label class="f" for="pamt">' + t('pay_amount') + '</label><input type="text" inputmode="decimal" id="pamt" value="' + esc(fm.amount) + '">' +
+        '<label class="f">' + t('pay_method') + '</label><div class="seg sm"><button type="button" data-method="支票" class="' + (fm.method === '支票' ? 'on' : '') + '">' + t('pay_check') + '</button>' +
+        '<button type="button" data-method="現金" class="' + (fm.method === '現金' ? 'on' : '') + '">' + t('pay_cash') + '</button></div>' +
+        (fm.method === '支票' ? '<label class="f" for="pchk">' + t('pay_checkno') + '</label><input type="text" inputmode="numeric" id="pchk" value="' + esc(fm.check) + '">' : '') +
+        '<label class="f" for="pstaff">' + t('pay_staff') + '</label><input type="text" id="pstaff" value="' + esc(W.store('wcec_staff_name') || '') + '">' +
+        '<label class="f" for="pnote">' + t('pay_note') + '</label><input type="text" id="pnote" value="' + esc(fm.note) + '">' +
+        '<div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button><button class="btn" id="psave"' + (busy ? ' disabled' : '') + '>' + (busy ? t('sending') : t('pay_save')) + '</button></div>' +
+        '<h3>' + t('pay_rec_h') + '</h3>' + (pay.records.length ? '<ul class="recs">' + pay.records.map(function (r) {
+          return '<li><b>$' + r.amount + '</b> ' + esc(r.item === '制服' ? t('pay_uniform') + (r.kid ? '（' + r.kid + '）' : '') : t('pay_donation')) +
+            ' · ' + esc(r.method === '支票' ? t('pay_check') + (r.check ? ' #' + r.check : '') : r.method === '現金' ? t('pay_cash') : r.method) +
+            '<span class="meta"> · ' + esc(r.staff || '') + ' · ' + esc(r.at || '') + '</span></li>'; }).join('') + '</ul>' : '<p class="meta">' + t('pay_none') + '</p>') +
+        '</section>';
+      return h;
     },
     kids: function () {
       var n = Object.keys(picked).filter(function (k) { return picked[k]; }).length;
@@ -213,6 +256,26 @@
     home: function () {
       bindPad(4, function () { via = 'phone'; lookup({ last4: digits }); });
       document.getElementById('scan').onclick = function () { go('scan'); startScan(); };
+      app.querySelectorAll('[data-mode]').forEach(function (b) {
+        b.onclick = function () {
+          var m = b.getAttribute('data-mode');
+          if (m === mode) return;
+          if (m === 'checkin') { mode = 'checkin'; notFound = null; render(); return; }
+          // 收款：App 裡（同工手機）直接進入；前台 iPad 要再輸入一次密碼，避免家長看到別人的收款
+          if (W.EMBED) { mode = 'pay'; notFound = null; render(); return; }
+          W.dialog({
+            title: t('pay_tab_pay'),
+            body: '<p>' + t('pay_pw') + '</p><input type="password" id="paypw" autocomplete="off" style="text-align:center;font-size:24px"><p class="msg" id="paypwerr" style="display:none"></p>',
+            actions: [
+              { label: t('pay_tab_pay'), onClick: function (close, el) {
+                if (el.querySelector('#paypw').value !== key) { var m2 = el.querySelector('#paypwerr'); m2.textContent = t('ci_wrong_pw'); m2.style.display = 'block'; return true; }
+                close(); mode = 'pay'; notFound = null; render();
+              } },
+              { label: t('ci_cancel'), kind: 'ghost' },
+            ],
+          });
+        };
+      });
       var cq = document.getElementById('cancelq');
       if (cq) cq.onclick = function () { reqId++; busy = false; digits = ''; render(); };
     },
@@ -220,6 +283,40 @@
     families: function () {
       app.querySelectorAll('[data-f]').forEach(function (b) { b.onclick = function () { pickFamily(families[+b.getAttribute('data-f')]); }; });
       document.getElementById('back').onclick = reset;
+    },
+    pay: function () {
+      if (!pay) return;
+      function keep() {   // 重畫前把輸入框的內容存起來
+        var a = document.getElementById('pamt'), c = document.getElementById('pchk'), n = document.getElementById('pnote'), k = document.getElementById('pkid'), st = document.getElementById('pstaff');
+        if (a) payForm.amount = a.value; if (c) payForm.check = c.value; if (n) payForm.note = n.value; if (k) payForm.kid = k.value;
+        if (st && st.value.trim()) W.store('wcec_staff_name', st.value.trim());
+      }
+      app.querySelectorAll('[data-item]').forEach(function (b) {
+        b.onclick = function () {
+          keep(); payForm.item = b.getAttribute('data-item');
+          if (payForm.item === '制服') { var uk = pay.kids.filter(function (k) { return k.uniform; })[0]; if (uk) { payForm.kid = payForm.kid || uk.name; payForm.amount = String(uk.uniform); } }
+          else payForm.amount = String(pay.suggested || '');
+          render();
+        };
+      });
+      app.querySelectorAll('[data-method]').forEach(function (b) { b.onclick = function () { keep(); payForm.method = b.getAttribute('data-method'); render(); }; });
+      var ks = document.getElementById('pkid');
+      if (ks) ks.onchange = function () { var k = pay.kids.filter(function (x) { return x.name === ks.value; })[0]; keep(); if (k) payForm.amount = String(k.uniform); render(); };
+      document.getElementById('back').onclick = function () { pay = null; go('home'); };
+      document.getElementById('psave').onclick = function () {
+        keep();
+        var staff = W.store('wcec_staff_name') || '', amt = Number(payForm.amount);
+        if (!(amt > 0) || !payForm.method || !staff) { err = t('pay_err'); render(); return; }
+        busy = true; render();
+        W.call('payAdd', { key: key, fid: pay.fid, item: payForm.item, kid: payForm.item === '制服' ? payForm.kid : '', amount: amt,
+          method: payForm.method, check: payForm.check, staff: staff, note: payForm.note }).then(function (r) {
+          busy = false;
+          if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); err = W.errText(r.error); render(); return; }
+          pay = r; W.toast(t('pay_saved', { a: amt }));
+          payForm = { item: '奉獻', kid: '', amount: '', method: '', check: '', note: '' };
+          render();
+        });
+      };
     },
     kids: function () {
       app.querySelectorAll('[data-c]').forEach(function (b) {
@@ -280,7 +377,19 @@
     });
   }
 
+  // 收款：讀取這個家庭今年報 Awana 的孩子、建議奉獻和收款紀錄
+  function openPay(f) {
+    pay = null; payForm = { item: '奉獻', kid: '', amount: '', method: '', check: '', note: '' };
+    go('pay');
+    W.call('payInfo', { key: key, fid: f.fid }).then(function (r) {
+      if (view !== 'pay') return;
+      if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); err = W.errText(r.error); view = 'home'; render(); return; }
+      pay = r; payForm.amount = String(r.suggested || ''); render();
+    });
+  }
+
   function pickFamily(f) {
+    if (mode === 'pay') return openPay(f);
     fam = f; picked = {};
     f.kids.forEach(function (k) { if (!k.checkedIn) picked[k.cid] = true; });   // 預設全選還沒簽到的孩子
     go('kids');

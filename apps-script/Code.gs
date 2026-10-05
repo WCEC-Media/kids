@@ -26,13 +26,15 @@ var SHEET = {
   RELEASE: '同意書',
   LOG: '簽到紀錄',
   SESSIONS: '登入裝置',
+  PAY: '收款紀錄',
+  PAYSUM: '收款總覽',
 };
 
 var PROGRAMS = ['Awana', '主日學'];
 
 var HEADERS = {
   '設定': ['項目', '值', '說明'],
-  '班別': ['年級', '班別'],
+  '班別': ['年級', '班別', '制服價格'],
   '家庭': ['家庭編號', '建立時間', '家長 First Name', '家長 Last Name', '關係', '手機', '手機末四碼', 'Email', '其他家長Email',
            '住址', 'City', 'State', 'ZIP',
            '第二家長 First Name', '第二家長 Last Name', '第二家長關係', '第二家長手機',
@@ -44,6 +46,10 @@ var HEADERS = {
   '簽到紀錄': ['日期', '孩子編號', '孩子姓名', '班別', '家庭編號', '簽到時間',
              '簽到方式', '接送碼', '簽退時間', '簽退同工'],
   '登入裝置': ['建立時間', '家庭編號', 'Email', '權杖雜湊', '最後使用', '裝置', '狀態'],
+  // 同工在 App 簽到站「收款」記錄（也可以直接在試算表填）
+  '收款紀錄': ['學年', '家庭編號', '家庭', '項目', '孩子', '金額', '方式', '支票號碼', '收款同工', '記錄時間', '備註'],
+  // 每次記錄收款後自動重算；也可以從選單「更新收款總覽」
+  '收款總覽': ['家庭編號', '家庭', '手機末四碼', 'Awana 孩子', '建議奉獻', '已收奉獻', '已收制服', '最後收款'],
 };
 
 var DEFAULT_SETTINGS = [
@@ -56,14 +62,19 @@ var DEFAULT_SETTINGS = [
   ['登入保持天數', '365', '家長多久沒打開家長專區，就要重新用 Email 確認'],
   ['簽名資料夾ID', '', '家長簽名圖片存放的 Google Drive 資料夾；留空會自動建立'],
   ['時區', 'America/New_York', ''],
+  ['Awana建議奉獻（1位）', '40', '只有一個孩子報 Awana 的家庭，建議奉獻金額（美元）'],
+  ['Awana建議奉獻（2位以上）', '60', '同一家庭兩個以上孩子報 Awana，整個家庭的建議奉獻金額'],
+  ['支票抬頭', 'WCEC', '支票請寫給誰'],
 ];
 
 // 由小到大排列：續報時「建議年級」就是下一列；最後一列（6 年級）之後就算畢業
 var DEFAULT_CLASSES = [
-  ['2歲', 'Puggles'], ['3歲', 'Cubbies'], ['4歲 (PreK)', 'Cubbies'],
-  ['K', 'Sparks'], ['1', 'Sparks'], ['2', 'Sparks'],
-  ['3', 'T&T'], ['4', 'T&T'], ['5', 'T&T'], ['6', 'T&T'],
+  ['2歲', 'Puggles', ''], ['3歲', 'Cubbies', 15], ['4歲 (PreK)', 'Cubbies', 15],
+  ['K', 'Sparks', 15], ['1', 'Sparks', 15], ['2', 'Sparks', 15],
+  ['3', 'T&T', 20], ['4', 'T&T', 20], ['5', 'T&T', 20], ['6', 'T&T', 20],
 ];
+// 「班別」工作表還沒有「制服價格」欄時用的預設價格
+var UNIFORM_DEFAULT = { 'Cubbies': 15, 'Sparks': 15, 'T&T': 20 };
 
 // ───────────────────────── 選單與初始設定 ─────────────────────────
 function onOpen() {
@@ -71,6 +82,7 @@ function onOpen() {
     .addItem('初始設定（只需執行一次）', 'setup')
     .addItem('補齊手動輸入的家庭資料', 'fillMissing')
     .addItem('寄續報通知給去年的家庭', 'sendRenewalNotices')
+    .addItem('更新收款總覽', 'rebuildPaySummary')
     .addSeparator()
     .addItem('開啟「保持網站快速」（每 5 分鐘喚醒一次）', 'installKeepWarm')
     .addToUi();
@@ -97,9 +109,20 @@ function setup() {
   var st = ss.getSheetByName(SHEET.SETTINGS);
   st.getRange(1, 2, 50, 1).setNumberFormat('@');   // 值存成文字：2026-27 不會被當成日期
   if (st.getLastRow() === 1) st.getRange(2, 1, DEFAULT_SETTINGS.length, 3).setValues(DEFAULT_SETTINGS);
+  else {   // 舊的試算表：補上新增的設定項目（例如建議奉獻金額）
+    var have = {};
+    readRows_(SHEET.SETTINGS).forEach(function (r) { have[r['項目']] = true; });
+    DEFAULT_SETTINGS.forEach(function (d) { if (!have[d[0]]) st.appendRow(d); });
+  }
   var cl = ss.getSheetByName(SHEET.CLASSES);
   cl.getRange(1, 1, 50, 1).setNumberFormat('@');
-  if (cl.getLastRow() === 1) cl.getRange(2, 1, DEFAULT_CLASSES.length, 2).setValues(DEFAULT_CLASSES);
+  if (cl.getLastRow() === 1) cl.getRange(2, 1, DEFAULT_CLASSES.length, 3).setValues(DEFAULT_CLASSES);
+  else if (String(cl.getRange(1, 3).getValue()) !== '制服價格') {   // 舊的試算表：加上「制服價格」欄並填預設價格
+    cl.getRange(1, 3).setValue('制服價格').setFontWeight('bold');
+    var n = cl.getLastRow() - 1;
+    var names = cl.getRange(2, 2, n, 1).getValues();
+    cl.getRange(2, 3, n, 1).setValues(names.map(function (r) { return [UNIFORM_DEFAULT[r[0]] || '']; }));
+  }
   // 電話、ZIP、年級、學年存成文字，避免開頭的 0 被吃掉、2026-27 被當成日期
   textCols_(SHEET.FAMILIES, ['手機', '手機末四碼', 'ZIP', '第二家長手機', '緊急聯絡人電話']);
   textCols_(SHEET.KIDS, ['家長手機（手動輸入用）', '年級（手動輸入用）']);
@@ -225,6 +248,8 @@ function handle_(req) {
       case 'unlock':       return unlock_(req);
       case 'lookup':       return lookup_(req);
       case 'roster':       return roster_(req);
+      case 'payInfo':      return payInfo_(req);
+      case 'payAdd':       return payAdd_(req);
       case 'checkin':      return checkin_(req);
       default:             return { ok: false, error: 'unknown_action' };
     }
@@ -242,7 +267,7 @@ function json_(obj) {
 // ───────────────────────── 公開：表單設定 ─────────────────────────
 function config_() {
   var s = settings_();
-  return { ok: true, year: s['學年'], open: isTrue_(s['開放報名']), grades: grades_() };
+  return { ok: true, year: s['學年'], open: isTrue_(s['開放報名']), grades: grades_(), fees: fees_(s) };
 }
 
 // ───────────────────────── 公開：送出前檢查是不是已經登記過 ─────────────────────────
@@ -356,7 +381,7 @@ function register_(req) {
 
     saveRelease_(fid, clean_(req.signer), sig, year, '報名表');
     var added = addKidsAndEnroll_(fid, kids, year, now, '');
-    if (isTrue_(s['寄確認信'])) sendConfirm_(isNew ? lc_(p.email) : fam['Email'], added, year);
+    if (isTrue_(s['寄確認信'])) sendConfirm_(isNew ? lc_(p.email) : fam['Email'], added, year, fid, s);
 
     var out = { ok: true, dup: !isNew, kids: added, last4: phone.slice(-4) };
     if (isNew) {
@@ -625,6 +650,7 @@ function familyView_(a) {
     open: isTrue_(s['開放報名']),
     signed: signedThisYear_(f['家庭編號'], year),
     grades: grades_(),
+    fees: fees_(s),
     family: {
       first: f['家長 First Name'], last: f['家長 Last Name'], name: parentName_(f), relation: f['關係'],
       phone: String(f['手機']), last4: String(f['手機末四碼']),
@@ -682,7 +708,7 @@ function enroll_(req) {
       progs.forEach(function (g) { addEnrollment_(k, String(p.grade), year, g, now, '家長專區續報'); });
       if (progs.length) added.push({ name: kidName_(k), cls: gm[String(p.grade)], programs: progs });
     });
-    if (added.length && isTrue_(a.s['寄確認信'])) sendConfirm_(a.email, added, year);
+    if (added.length && isTrue_(a.s['寄確認信'])) sendConfirm_(a.email, added, year, a.fam['家庭編號'], a.s);
     return { ok: true, data: familyView_(a), added: added };
   } finally { lock.releaseLock(); }
 }
@@ -902,14 +928,14 @@ function sendRenewalMail_(email, year, names) {
   });
 }
 
-function sendConfirm_(email, kids, year) {
+function sendConfirm_(email, kids, year, fid, s) {
   if (!email || kids.length === 0) return;
   try {
     var list = kids.map(function (k) { return '・' + k.name + '（' + k.programs.join('、') + '）'; }).join('\n');
     MailApp.sendEmail({
       to: email,
       subject: 'WCEC Awana／主日學 ' + year + ' 報名成功 / Registration received',
-      body: '謝謝您報名！\nThank you for registering!\n\n' + list +
+      body: '謝謝您報名！\nThank you for registering!\n\n' + list + feeText_(fid, year, s) +
         '\n\nAwana 簽到時，在前台 iPad 輸入您手機號碼的末四碼即可。\n' +
         'For Awana check-in, enter the last 4 digits of your phone number at the front desk iPad.\n\n' +
         '威明頓主恩堂 兒童事工 / WCEC Children\'s Ministry',
@@ -1045,6 +1071,81 @@ function checkin_(req) {
   }
 }
 
+// ───────────────────────── 收款（同工用，需要簽到站密碼）─────────────────────────
+// 建議奉獻和制服都是現場收支票或現金，同工在 App 簽到站的「收款」記錄；家長端不會看到收款狀態
+
+function ensureSheet_(name) {
+  var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.appendRow(HEADERS[name]); sh.setFrozenRows(1);
+    sh.getRange(1, 1, 1, HEADERS[name].length).setFontWeight('bold');
+    if (name === SHEET.PAY) sh.getRange(1, 1, 1000, 1).setNumberFormat('@');   // 學年存成文字
+  }
+  return sh;
+}
+
+function payInfo_(req) {
+  var err = checkStation_(req);
+  if (err) return { ok: false, error: err };
+  var s = settings_(), year = String(s['學年']);
+  var fam = rows_(SHEET.FAMILIES).filter(function (f) { return f['家庭編號'] === req.fid; })[0];
+  if (!fam) return { ok: false, error: 'not_found' };
+  var kids = awanaKidsOf_(req.fid, year), f = fees_(s);
+  var recs = rows_(SHEET.PAY).filter(function (r) { return String(r['學年']) === year && r['家庭編號'] === req.fid; }).map(function (r) {
+    return { item: r['項目'], kid: r['孩子'], amount: Number(r['金額']) || 0, method: r['方式'], check: String(r['支票號碼'] || ''), staff: r['收款同工'],
+             at: r['記錄時間'] instanceof Date ? Utilities.formatDate(r['記錄時間'], tz_(s), 'M/d') : String(r['記錄時間'] || '') };
+  });
+  return { ok: true, year: year, fid: req.fid, family: parentName_(fam), kids: kids, suggested: suggested_(f, kids.length), payee: f.payee, records: recs };
+}
+
+function payAdd_(req) {
+  var err = checkStation_(req);
+  if (err) return { ok: false, error: err };
+  var s = settings_(), year = String(s['學年']);
+  var item = req.item === '制服' ? '制服' : '奉獻';
+  var amount = Math.round(Number(req.amount) * 100) / 100;
+  var method = ['支票', '現金', '其他'].indexOf(req.method) >= 0 ? req.method : '';
+  if (!req.fid || !(amount > 0) || amount > 10000 || !method || !clean_(req.staff)) return { ok: false, error: 'invalid' };
+  var fam = rows_(SHEET.FAMILIES).filter(function (f) { return f['家庭編號'] === req.fid; })[0];
+  if (!fam) return { ok: false, error: 'not_found' };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  dirty_();
+  try {
+    var sh = ensureSheet_(SHEET.PAY);
+    written_();
+    sh.appendRow([year, req.fid, parentName_(fam), item, item === '制服' ? clean_(req.kid) : '', amount, method,
+                  method === '支票' ? clean_(req.check) : '', clean_(req.staff), new Date(), clean_(req.note)]);
+    try { rebuildPaySummary_(); } catch (e) { console.error('pay summary', e); }
+  } finally { lock.releaseLock(); }
+  dirty_();
+  return payInfo_(req);
+}
+
+// 收款總覽：今年報 Awana 的每個家庭一列（建議奉獻、已收）
+function rebuildPaySummary() { rebuildPaySummary_(); SpreadsheetApp.getUi().alert('收款總覽已更新。'); }
+function rebuildPaySummary_() {
+  var s = settings_(), year = String(s['學年']), f = fees_(s);
+  var byFam = {};
+  activeKids_(s).forEach(function (k) { (byFam[k.fid] = byFam[k.fid] || []).push(k.name); });
+  var paid = {};
+  rows_(SHEET.PAY).forEach(function (r) {
+    if (String(r['學年']) !== year) return;
+    var p = paid[r['家庭編號']] = paid[r['家庭編號']] || { d: 0, u: 0, last: null };
+    if (r['項目'] === '制服') p.u += Number(r['金額']) || 0; else p.d += Number(r['金額']) || 0;
+    var at = r['記錄時間'] instanceof Date ? r['記錄時間'] : null;
+    if (at && (!p.last || at > p.last)) p.last = at;
+  });
+  var out = rows_(SHEET.FAMILIES).filter(function (fm) { return byFam[fm['家庭編號']] || paid[fm['家庭編號']]; }).map(function (fm) {
+    var fid = fm['家庭編號'], kids = byFam[fid] || [], p = paid[fid] || { d: 0, u: 0, last: null };
+    return [fid, parentName_(fm), String(fm['手機末四碼'] || ''), kids.join('、'), suggested_(f, kids.length), p.d, p.u, p.last || ''];
+  });
+  var sh = ensureSheet_(SHEET.PAYSUM);
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS[SHEET.PAYSUM].length).clearContent();
+  if (out.length) sh.getRange(2, 1, out.length, HEADERS[SHEET.PAYSUM].length).setValues(out);
+}
+
 // 今年有報 Awana 的孩子（前台簽到站目前只做 Awana）
 function activeKids_(s) {
   var year = String(s['學年']);
@@ -1073,7 +1174,47 @@ function setSetting_(key, value) {
 }
 
 function grades_() {
-  return rows_(SHEET.CLASSES).map(function (r) { return { grade: String(r['年級']), cls: r['班別'] }; });
+  return rows_(SHEET.CLASSES).map(function (r) {
+    var price = r['制服價格'] === undefined ? (UNIFORM_DEFAULT[r['班別']] || 0) : (Number(r['制服價格']) || 0);
+    return { grade: String(r['年級']), cls: r['班別'], uniform: price };
+  });
+}
+
+// 建議奉獻（只有 Awana）：設定工作表沒有這幾項時用預設值
+function fees_(s) {
+  return {
+    one: Number(s['Awana建議奉獻（1位）']) || 40,
+    multi: Number(s['Awana建議奉獻（2位以上）']) || 60,
+    payee: String(s['支票抬頭'] || 'WCEC'),
+  };
+}
+function suggested_(fees, n) { return n <= 0 ? 0 : n === 1 ? fees.one : fees.multi; }
+
+// 確認信裡的建議奉獻、制服說明（家庭今年沒有報 Awana 就不寫）
+function feeText_(fid, year, s) {
+  if (!fid || !s) return '';
+  var aw = awanaKidsOf_(fid, year);
+  if (!aw.length) return '';
+  var f = fees_(s), amt = suggested_(f, aw.length);
+  var uni = aw.filter(function (k) { return k.uniform; }).map(function (k) { return k.name + '（' + k.cls + '）$' + k.uniform; }).join('、');
+  return '\n\nAwana 建議奉獻 Suggested donation：$' + amt + '（' + aw.length + ' 位孩子 / ' + aw.length + ' child' + (aw.length > 1 ? 'ren' : '') + '）' +
+    (uni ? '\n制服 Uniform（現場購買 / buy on site）：' + uni : '') +
+    '\n支票抬頭 Checks payable to「' + f.payee + '」，也可以用現金。如有經濟上的需要，可申請獎助，請私下聯絡兒童事工同工。' +
+    '\nScholarships are available — please talk to a children\'s ministry staff member.';
+}
+
+// 這個家庭今年報 Awana 的孩子（姓名、班別、制服價格）
+function awanaKidsOf_(fid, year) {
+  var gm = {}, um = {};
+  grades_().forEach(function (g) { gm[g.grade] = g.cls; um[g.cls] = g.uniform; });
+  var kids = {};
+  rows_(SHEET.KIDS).forEach(function (k) { if (k['家庭編號'] === fid && k['狀態'] !== '停用') kids[k['孩子編號']] = k; });
+  return rows_(SHEET.ENROLL).filter(function (e) {
+    return String(e['學年']) === year && e['項目'] === 'Awana' && e['狀態'] === '有效' && kids[e['孩子編號']];
+  }).map(function (e) {
+    var cls = e['班別'] || gm[String(e['年級'])] || '';
+    return { cid: e['孩子編號'], name: kidName_(kids[e['孩子編號']]), cls: cls, uniform: um[cls] || 0 };
+  });
 }
 function gradeMap_() {
   var m = {};

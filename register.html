@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Awana／主日學報名 | WCEC</title>
-<link rel="stylesheet" href="style.css?v=20261005e">
-<link rel="stylesheet" href="ios.css?v=20261005e">
+<link rel="stylesheet" href="style.css?v=20261005f">
+<link rel="stylesheet" href="ios.css?v=20261005f">
 </head>
 <body>
 <div class="wrap" id="app" aria-live="polite"></div>
@@ -16,7 +16,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261005e"></script>
+<script src="common.js?v=20261005f"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -93,6 +93,15 @@
   function get(path) { return path.split('.').reduce(function (o, k) { return o == null ? '' : o[k]; }, S) || ''; }
   function set(path, v) { var ks = path.split('.'), o = S; ks.slice(0, -1).forEach(function (k) { o = o[k]; }); o[ks[ks.length - 1]] = v; }
 
+  // Awana 建議奉獻與制服（依照這次報 Awana 的孩子自動計算）
+  function feeCard() {
+    var aw = S.kids.filter(function (k) { return k.awana; }).map(function (k) {
+      var g = (cfg.grades || []).filter(function (x) { return x.grade === k.grade; })[0] || {};
+      return { name: (k.first + ' ' + k.last).trim(), cls: g.cls || '', uniform: g.uniform || 0 };
+    });
+    var h = W.feeHtml(cfg.fees, aw);
+    return h ? '<div class="card fee"><h3 style="margin:0 0 6px">' + t('fee_h') + '</h3>' + h + '</div>' : '';
+  }
   function header() {
     return '<header class="top"><div><h1>' + t('r_title') + '</h1><p class="sub">' + t('reg_sub') + (cfg && cfg.year ? ' · ' + esc(cfg.year) : '') + '</p></div>' +
       '<button class="btn ghost small langbtn" id="lang" type="button">' + t('lang_btn') + '</button></header>' + W.demoBar();
@@ -158,6 +167,7 @@
         '<p class="hint">' + t('sign_hint') + '</p><canvas id="pad" class="pad" aria-label="' + t('sign_h') + '"></canvas>' +
         '<div class="sigline"><span>' + esc(p.first + ' ' + p.last) + '</span><span>Date: <b>' + new Date().toLocaleDateString('en-US') + '</b></span></div>' +
         '<div class="msg" id="sigmsg"></div></div>' +
+        feeCard() +
         '<div class="card"><h3 style="margin:0 0 8px">' + t('sum_h') + '</h3><dl class="sum">' +
         S.kids.map(function (k) {
           var progs = [k.awana ? 'Awana' : '', k.ss ? t('ss') : ''].filter(String).join('、');

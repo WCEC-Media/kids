@@ -38,6 +38,16 @@
       },
       setFontWeight: function () { return this; },
       setNumberFormat: function () { return this; },
+      getValue: function () { var row = rows[r - 1] || []; return row[c - 1] == null ? '' : row[c - 1]; },
+      getValues: function () {
+        var out = [];
+        for (var i = 0; i < nr; i++) { var row = rows[r - 1 + i] || [], o = []; for (var j = 0; j < nc; j++) o.push(row[c - 1 + j] == null ? '' : row[c - 1 + j]); out.push(o); }
+        return out;
+      },
+      clearContent: function () {
+        for (var i = 0; i < nr; i++) { var row = rows[r - 1 + i]; if (row) for (var j = 0; j < nc; j++) row[c - 1 + j] = ''; }
+        return this;
+      },
     };
   }
   function Sheet(name) {
@@ -67,7 +77,7 @@
     getActive: function () { return ss; },
     getUi: function () {
       return { alert: function (m) { console.log('[試算表提示]', m); },
-               createMenu: function () { return { addItem: function () { return this; }, addToUi: function () {} }; } };
+               createMenu: function () { return { addItem: function () { return this; }, addSeparator: function () { return this; }, addToUi: function () {} }; } };
     },
   };
 

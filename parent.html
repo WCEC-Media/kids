@@ -53,6 +53,7 @@
   .v { color: var(--label2); text-align: right; overflow-wrap: anywhere; }
   .chev { width: 8px; height: 13px; flex: 0 0 8px; opacity: .55; }
   .tint { color: var(--tint); } .red { color: var(--red); }
+  .row.fee p { margin: 4px 0; font-size: 17px; line-height: 1.45; } .row.fee b { font-size: 20px; }
   .ghx { display: flex; align-items: flex-end; justify-content: space-between; text-transform: none; }
   .ghx span { text-transform: uppercase; }
   .ghx .edit { color: var(--tint); font-size: 17px; font-weight: 600; min-height: 44px; min-width: 44px; padding: 0 2px; margin-bottom: -10px; text-align: right; }
@@ -148,7 +149,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261005e"></script>
+<script src="common.js?v=20261005f"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -237,6 +238,7 @@
       h += '</div>';
       if (!d.open) h += '<p class="gf">' + t('p_closed', { year: esc(d.year) }) + '</p>';
 
+      h += feeGroup(awanaNow());
       h += '<div class="gh">' + t('pz_card') + '</div><div class="pass"><div class="top"><b>WCEC Awana</b><span>' + t('pz_card') + '</span></div>' +
         '<div class="body"><div class="qr" id="qr"></div><div><div class="fam">' + esc(t('p_family_of', { name: f.name })) + '</div>' +
         '<div class="lbl">' + (W.lang() === 'en' ? 'Last 4 of phone' : '手機末四碼') + '</div><div class="val">' + esc(f.last4) + '</div></div></div>' +
@@ -464,16 +466,30 @@
       '<div class="row"><span class="k grow">' + t('p_phone') + '</span><span class="v">' + esc(W.fmtPhone(f.phone)) + '</span></div>' +
       '<div class="row"><span class="k grow">' + t('p_emergency') + '</span><span class="v">' + esc((f.pickups[0] || {}).first ? f.pickups[0].first + ' ' + f.pickups[0].last + ' · ' + W.fmtPhone(f.pickups[0].phone) : '—') + '</span></div>' +
       '<button class="row tint" type="button" id="enEdit">' + t('en_contact_edit') + '</button></div>' +
+      '<div id="feebox"></div>' +
       releaseBlock() +
       '<div class="padx" style="margin-top:22px"><button class="pill fill" type="button" data-bigsave>' + t('en_submit') + '</button></div>';
     openSheet({
       title: t('p_enroll_title', { year: data.year }), save: t('p_submit'), body: body,
       onOpen: function (el) {
         bindToggles(el); setupPad(el);
+        // 奉獻說明跟著勾選即時更新（已經報名的 + 這次勾選 Awana 的）
+        function updFee() {
+          var kids = awanaNow();
+          el.querySelectorAll('[data-ek]').forEach(function (g) {
+            if (!isOn(g, '[data-join]') || !isOn(g, '[data-p="Awana"]')) return;
+            var cid = g.getAttribute('data-ek'), k = data.kids.filter(function (x) { return x.cid === cid; })[0], cls = clsOf(val('g_' + cid));
+            if (k && !kids.some(function (x) { return x.cid === cid; })) kids.push({ cid: cid, name: k.name, cls: cls, uniform: uniformOf(cls) });
+          });
+          el.querySelector('#feebox').innerHTML = feeGroup(kids);
+        }
         el.querySelectorAll('[data-ek]').forEach(function (g) {
           var j = g.querySelector('[data-join]'), det = g.querySelector('[data-detail]');
-          j.onToggle = function () { det.hidden = !j.classList.contains('on'); };
+          j.onToggle = function () { det.hidden = !j.classList.contains('on'); updFee(); };
+          g.querySelector('[data-p="Awana"]').onToggle = updFee;
+          var sel = el.querySelector('#g_' + g.getAttribute('data-ek')); if (sel) sel.addEventListener('change', updFee);
         });
+        updFee();
         el.querySelector('#enEdit').onclick = function () { closeSheet(); setTimeout(function () { contactSheet(enrollSheet); }, 350); };
       },
       onSave: function (el) {
@@ -496,6 +512,18 @@
   }
 
   // 孩子資料（新增或修改）
+  // Awana 奉獻說明：家庭今年報 Awana 的孩子
+  function uniformOf(cls) { var g = (data.grades || []).filter(function (x) { return x.cls === cls; })[0]; return g ? g.uniform || 0 : 0; }
+  function clsOf(grade) { var g = (data.grades || []).filter(function (x) { return x.grade === grade; })[0]; return g ? g.cls : ''; }
+  function awanaNow() {
+    return data.kids.filter(function (k) { return k.enrolled && (k.programs || []).indexOf('Awana') >= 0; })
+      .map(function (k) { return { cid: k.cid, name: k.name, cls: k.cls, uniform: uniformOf(k.cls) }; });
+  }
+  function feeGroup(kids) {
+    var h = W.feeHtml(data.fees, kids);
+    return h ? '<div class="gh">' + t('fee_h') + '</div><div class="group"><div class="row fee" style="display:block">' + h + '</div></div>' : '';
+  }
+
   // 孩子資料：先查看（只顯示），右上角「編輯」才進到編輯畫面
   function kidView(k) {
     var en = W.lang() === 'en', d = data;
