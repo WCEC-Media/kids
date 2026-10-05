@@ -1,0 +1,84 @@
+/* iPhone 風格外觀：讓報名表跟「家長專區」看起來是同一套（系統字型、分組卡片、灰底輸入框）
+   放在 style.css 後面載入，只覆蓋外觀，不改版面結構 */
+:root {
+  color-scheme: light;
+  --bg: #f2f2f7; --card: #ffffff; --ink: #000; --muted: rgba(60,60,67,.78);
+  --line: rgba(60,60,67,.18); --brand: #2c3e6b; --brand-ink: #fff; --brand-soft: rgba(44,62,107,.1);
+  --gold: #d4a24c; --gold-soft: #f6ead3; --fill: rgba(118,118,128,.12);
+  --ok: #248a3d; --ok-soft: rgba(36,138,61,.12); --err: #d70015; --err-soft: rgba(215,0,21,.08);
+  --focus: #d4a24c; --radius: 12px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #000; --card: #1f1f22; --ink: #fff; --muted: rgba(235,235,245,.82);
+  --line: rgba(120,120,128,.55); --brand: #a8c0f7; --brand-ink: #000; --brand-soft: rgba(168,192,247,.16);
+  --gold: #e3b664; --gold-soft: rgba(227,182,100,.16); --fill: rgba(118,118,128,.24);
+  --ok: #30d158; --ok-soft: rgba(48,209,88,.14); --err: #ff6961; --err-soft: rgba(255,105,97,.14);
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #000; --card: #1f1f22; --ink: #fff; --muted: rgba(235,235,245,.82);
+  --line: rgba(120,120,128,.55); --brand: #a8c0f7; --brand-ink: #000; --brand-soft: rgba(168,192,247,.16);
+  --gold: #e3b664; --gold-soft: rgba(227,182,100,.16); --fill: rgba(118,118,128,.24);
+  --ok: #30d158; --ok-soft: rgba(48,209,88,.14); --err: #ff6961; --err-soft: rgba(255,105,97,.14);
+  color-scheme: dark;
+}
+
+body {
+  font: 400 19px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+  letter-spacing: -0.01em; -webkit-tap-highlight-color: transparent;
+}
+h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.025em; }
+h2 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 8px 4px 6px; }
+h3, .headrow h3, .kid-head h3 { font-size: 19px; font-weight: 600; }
+.lead { font-size: 17px; margin: 0 4px 12px; color: var(--muted); }
+.sub, .hint, .stepname { color: var(--muted); }
+.hint { font-size: 16px; }
+
+/* 卡片 = iOS 分組 */
+.card { border: 0; border-radius: 12px; padding: 16px; margin: 12px 0; }
+.kidcard { border-left: 0; }
+.kid, .ekid, .cand { border: 0; background: var(--card); border-radius: 12px; }
+
+/* 欄位 */
+label.f { font-weight: 600; font-size: 17px; margin: 16px 0 6px; }
+label.f .req { font-size: 14px; font-weight: 500; }
+.opt { font-size: 14px; }
+input[type=text], input[type=tel], input[type=email], input[type=password], input[type=date], select, textarea {
+  background: var(--fill); border: 1.5px solid transparent; border-radius: 10px;
+  min-height: 52px; padding: 12px 14px; font-weight: 400;
+}
+input[type=date] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; text-align: left; }
+input[type=date]::-webkit-date-and-time-value { text-align: left; }
+select { -webkit-appearance: none; appearance: none; padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238e8e93' stroke-width='2'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); }
+.bad input, .bad select, .bad textarea { border-color: var(--err); background-color: var(--err-soft); }
+.msg { font-size: 16px; font-weight: 600; }
+
+/* 按鈕 */
+.btn { border: 0; border-radius: 14px; min-height: 54px; font-weight: 600; }
+.btn.ghost { background: var(--fill); color: var(--brand); }
+.btn.small { min-height: 44px; font-size: 17px; border-radius: 10px; }
+.btn.linkbtn { background: none; text-decoration: none; }
+.btn:active { transform: scale(.97); }
+
+/* 步驟條、選項 */
+.steps i { height: 5px; background: var(--fill); }
+.choice { border: 1.5px solid transparent; border-radius: 12px; }
+.choice input, .check input { accent-color: var(--brand); }
+.choice:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.legal { background: var(--card); border: 0; border-radius: 12px; }
+.pad { border: 1.5px dashed var(--line); border-radius: 10px; }
+.sigline { border-top: .5px solid var(--line); font-size: 15px; }
+.banner { border-radius: 12px; font-weight: 600; }
+.cls-tag, .cand .why { font-size: 15px; }
+
+/* 底部按鈕列 */
+.navbar { border-top: .5px solid var(--line); background: color-mix(in srgb, var(--bg) 82%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
+
+/* 對話框 */
+.dlg { border-radius: 14px; }
+.dlg h2 { font-size: 22px; margin: 0 0 10px; }
+.toast { background: rgba(28,28,30,.92); color: #fff; font-weight: 600; }
