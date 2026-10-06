@@ -69,45 +69,47 @@
     touch();
   }
 
+  // 四個格子上面蓋一個透明的輸入框：點格子就跳出手機自己的數字鍵盤。
+  // 系統鍵盤由 iOS／Android 自己處理，按多快都不會漏字（網頁自己畫的按鈕在 App 裡會漏）。
   function pinBoxes(n, masked) {
-    var s = '<div class="pin" aria-label="' + esc(digits) + '">';
+    var s = '<label class="pinwrap"><div class="pin" aria-hidden="true">';
     for (var i = 0; i < n; i++) s += '<span class="' + (i < digits.length ? 'on' : '') + '">' + (i < digits.length ? (masked ? '•' : esc(digits[i])) : '') + '</span>';
-    return s + '</div>';
+    return s + '</div><input id="pinin" class="pinin" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="' + n + '"' +
+      ' autocomplete="off" autocorrect="off" spellcheck="false" aria-label="' + esc(t('ci_enter')) + '" value="' + esc(digits) + '"' + (busy ? ' disabled' : '') + '></label>';
   }
-  function pad() {
-    var k = ['1','2','3','4','5','6','7','8','9','clr','0','del'];
-    return '<div class="pad">' + k.map(function (x) {
-      if (x === 'clr') return '<button type="button" class="fn" data-k="clr">' + t('ci_clear') + '</button>';
-      if (x === 'del') return '<button type="button" class="fn" data-k="del" aria-label="delete">⌫</button>';
-      return '<button type="button" data-k="' + x + '">' + x + '</button>';
-    }).join('') + '</div>';
-  }
-  // 數字鍵：手指一碰到就算（pointerdown），不用等放開；而且只更新上面的四個格子，
-  // 不整頁重畫——整頁重畫會把按鈕換成新的，快速連按時下一下就會漏掉。
-  var padState = null;   // { max, onFull }，目前畫面有數字鍵時才有
-  function bindPad(max, onFull) { padState = { max: max, onFull: onFull }; }
+  var padState = null;   // { max, onFull }，目前畫面有輸入格時才有
   function updatePins() {
     var pin = app.querySelector('.pin');
     if (!pin) return;
-    var n = pin.children.length;
-    pin.setAttribute('aria-label', digits);
-    for (var i = 0; i < n; i++) {
+    for (var i = 0; i < pin.children.length; i++) {
       var c = pin.children[i];
       c.className = i < digits.length ? 'on' : '';
       c.textContent = i < digits.length ? digits[i] : '';
     }
+    var box = app.querySelector('.pinwrap');
+    if (box) box.classList.toggle('typing', document.activeElement && document.activeElement.id === 'pinin');
   }
-  app.addEventListener('pointerdown', function (e) {
-    var b = e.target.closest && e.target.closest('[data-k]');
-    if (!b || !padState || busy) return;
-    e.preventDefault();   // 不要觸發點兩下放大、也不要再送一次 click
-    b.classList.add('press'); setTimeout(function () { b.classList.remove('press'); }, 120);
-    var k = b.getAttribute('data-k'), max = padState.max;
-    if (k === 'clr') digits = ''; else if (k === 'del') digits = digits.slice(0, -1);
-    else if (digits.length < max) digits += k;
-    if (err || notFound) { err = ''; notFound = null; render(); } else updatePins();
-    if (digits.length === max && padState.onFull) padState.onFull();
-  });
+  function bindPad(max, onFull) {
+    padState = { max: max, onFull: onFull };
+    var inp = document.getElementById('pinin');
+    if (!inp) return;
+    inp.addEventListener('input', function () {
+      var v = inp.value.replace(/\D/g, '').slice(0, max);
+      if (inp.value !== v) inp.value = v;
+      digits = v;
+      // 原本的「找不到」提示：開始重新輸入就拿掉（不整頁重畫，鍵盤才不會收起來）
+      if (err || notFound) {
+        err = ''; notFound = null;
+        app.querySelectorAll('.nf, .banner.err').forEach(function (el) { el.remove(); });
+      }
+      updatePins(); touch();
+      if (digits.length === max && padState && padState.onFull) { inp.blur(); padState.onFull(); }
+    });
+    inp.addEventListener('focus', updatePins);
+    inp.addEventListener('blur', updatePins);
+    // 有實體鍵盤的電腦直接游標放好；手機／iPad 要使用者點一下格子才會跳出鍵盤（系統規定）
+    if (!busy && !(window.matchMedia && matchMedia('(pointer: coarse)').matches)) inp.focus();
+  }
 
   var views = {
     locked: function () {
@@ -121,7 +123,7 @@
       var st = '<p class="rstat">' + (roster ? '✓ ' + esc(t('ci_roster_ok', { n: roster.length })) : '<span class="spinner sm"></span> ' + esc(t('ci_roster_wait'))) + '</p>';
       return '<section class="center">' + nf + '<h2>' + t('ci_enter') + '</h2>' + pinBoxes(4) +
         (busy ? '<div class="searching"><span class="spinner"></span> ' + esc(t('ci_searching')) + ' <button type="button" class="btn ghost small" id="cancelq">' + t('ci_cancel') + '</button></div>' : '') +
-        '<div class="' + (busy ? 'dim' : '') + '">' + pad() + '</div>' +
+        '<p class="pinhint">' + esc(t('ci_tap')) + '</p>' +
         '<div class="actions"><button class="btn ghost" id="scan"' + (busy ? ' disabled' : '') + '>📷 ' + t('ci_scan') + '</button></div>' + st + '</section>';
     },
     scan: function () {
