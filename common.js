@@ -100,7 +100,7 @@
       e_email_taken: '這個 Email 已經屬於另一個家庭，請聯絡同工。',
       // 簽到站
       ci_title: 'Awana 簽到', ci_enter: '請輸入家長手機末四碼', ci_scan: '掃描家庭簽到卡',
-      ci_clear: '清除', ci_tap: '點一下上面的格子，用鍵盤輸入四個數字', ci_back: '返回', ci_search: '找孩子',
+      ci_clear: '清除', ci_tap: '點一下上面的格子，用鍵盤輸入四個數字', ci_type: '直接用鍵盤打，或點下面的數字', ci_back: '返回', ci_search: '找孩子',
       ci_pick_family: '請選擇您的家庭', ci_pick_kids: '請點選今天要簽到的孩子',
       ci_already: '已簽到', ci_go: '簽到', ci_none: '找不到資料。請確認號碼，或請同工協助。', ci_failed: '簽到沒有成功送出（可能是網路不穩），請再按一次「簽到」。',
       ci_done: '簽到完成！', ci_code: '接送碼', ci_code_hint: '接孩子時請出示這組號碼',
@@ -199,7 +199,7 @@
       e_phone_taken: 'This phone number belongs to another family. Please contact the staff.',
       e_email_taken: 'This email belongs to another family. Please contact the staff.',
       ci_title: 'Awana Check-in', ci_enter: 'Enter the last 4 digits of the parent\'s phone', ci_scan: 'Scan family card',
-      ci_clear: 'Clear', ci_tap: 'Tap the boxes above and type the 4 digits', ci_back: 'Back', ci_search: 'Find',
+      ci_clear: 'Clear', ci_tap: 'Tap the boxes above and type the 4 digits', ci_type: 'Type on the keyboard, or click the numbers below', ci_back: 'Back', ci_search: 'Find',
       ci_pick_family: 'Choose your family', ci_pick_kids: 'Tap the children checking in today',
       ci_already: 'Checked in', ci_go: 'Check in', ci_none: 'Not found. Check the number or ask a staff member.', ci_failed: 'Check-in didn\'t go through (the connection may be unstable). Please tap Check in again.',
       ci_done: 'All checked in!', ci_code: 'Pickup code', ci_code_hint: 'Show this code when picking up',

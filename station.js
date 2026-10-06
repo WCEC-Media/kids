@@ -77,6 +77,17 @@
     return s + '</div><input id="pinin" class="pinin" type="tel" inputmode="numeric" pattern="[0-9]*" maxlength="' + n + '"' +
       ' autocomplete="off" autocorrect="off" spellcheck="false" aria-label="' + esc(t('ci_enter')) + '" value="' + esc(digits) + '"' + (busy ? ' disabled' : '') + '></label>';
   }
+  // 電腦（用滑鼠）：除了直接用實體鍵盤打，也顯示可以點的數字鍵。手機／平板只用系統鍵盤。
+  var TOUCH = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+  function pad() {
+    if (TOUCH) return '';
+    var k = ['1','2','3','4','5','6','7','8','9','clr','0','del'];
+    return '<div class="pad">' + k.map(function (x) {
+      if (x === 'clr') return '<button type="button" class="fn" data-k="clr">' + t('ci_clear') + '</button>';
+      if (x === 'del') return '<button type="button" class="fn" data-k="del" aria-label="delete">⌫</button>';
+      return '<button type="button" data-k="' + x + '">' + x + '</button>';
+    }).join('') + '</div>';
+  }
   var padState = null;   // { max, onFull }，目前畫面有輸入格時才有
   function updatePins() {
     var pin = app.querySelector('.pin');
@@ -93,8 +104,9 @@
     padState = { max: max, onFull: onFull };
     var inp = document.getElementById('pinin');
     if (!inp) return;
-    inp.addEventListener('input', function () {
-      var v = inp.value.replace(/\D/g, '').slice(0, max);
+    inp.addEventListener('input', function () { setDigits(inp.value); });
+    function setDigits(raw) {
+      var v = String(raw).replace(/\D/g, '').slice(0, max);
       if (inp.value !== v) inp.value = v;
       digits = v;
       // 原本的「找不到」提示：開始重新輸入就拿掉（不整頁重畫，鍵盤才不會收起來）
@@ -104,6 +116,17 @@
       }
       updatePins(); touch();
       if (digits.length === max && padState && padState.onFull) { inp.blur(); padState.onFull(); }
+    }
+    // 電腦上的數字鍵：按下就算，並把游標留在輸入格（實體鍵盤可以接著打）
+    var padEl = app.querySelector('.pad');
+    if (padEl) padEl.addEventListener('pointerdown', function (e) {
+      var b = e.target.closest && e.target.closest('[data-k]');
+      if (!b || busy) return;
+      e.preventDefault();
+      b.classList.add('press'); setTimeout(function () { b.classList.remove('press'); }, 120);
+      var k = b.getAttribute('data-k');
+      if (digits.length < max || k === 'clr' || k === 'del') inp.focus();
+      setDigits(k === 'clr' ? '' : k === 'del' ? digits.slice(0, -1) : digits + k);
     });
     inp.addEventListener('focus', updatePins);
     inp.addEventListener('blur', updatePins);
@@ -123,7 +146,8 @@
       var st = '<p class="rstat">' + (roster ? '✓ ' + esc(t('ci_roster_ok', { n: roster.length })) : '<span class="spinner sm"></span> ' + esc(t('ci_roster_wait'))) + '</p>';
       return '<section class="center">' + nf + '<h2>' + t('ci_enter') + '</h2>' + pinBoxes(4) +
         (busy ? '<div class="searching"><span class="spinner"></span> ' + esc(t('ci_searching')) + ' <button type="button" class="btn ghost small" id="cancelq">' + t('ci_cancel') + '</button></div>' : '') +
-        '<p class="pinhint">' + esc(t('ci_tap')) + '</p>' +
+        '<p class="pinhint">' + esc(t(TOUCH ? 'ci_tap' : 'ci_type')) + '</p>' +
+        '<div class="' + (busy ? 'dim' : '') + '">' + pad() + '</div>' +
         '<div class="actions"><button class="btn ghost" id="scan"' + (busy ? ' disabled' : '') + '>📷 ' + t('ci_scan') + '</button></div>' + st + '</section>';
     },
     scan: function () {
