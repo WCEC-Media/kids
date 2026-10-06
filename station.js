@@ -19,7 +19,13 @@
     if (roster && roster.length && !(r.families && r.families.length)) return;
     useRoster(r);
     W.store('wcec_roster', JSON.stringify({ at: rosterAt, families: roster, others: others, showCode: showCode }));
-    if (view === 'home') render();
+    // 只更新最下面那一行「名單已準備好」，不整頁重畫：
+    // 整頁重畫會換掉輸入框，同工剛點開的鍵盤就會自己收起來（一進簽到頁時最容易遇到）
+    if (view === 'home') {
+      var st = app.querySelector('.rstat');
+      if (st) st.innerHTML = '✓ ' + esc(t('ci_roster_ok', { n: roster.length }));
+      else render();
+    }
   }
   function forgetRoster() { roster = null; others = []; rosterAt = 0; W.forget('wcec_roster'); }
   if (key) { try { var saved = JSON.parse(W.store('wcec_roster') || 'null'); if (saved && saved.families) useRoster(saved, saved.at); } catch (e) {} }
