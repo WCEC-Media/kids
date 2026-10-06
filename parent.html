@@ -238,7 +238,7 @@
       h += '</div>';
       if (!d.open) h += '<p class="gf">' + t('p_closed', { year: esc(d.year) }) + '</p>';
 
-      h += feeGroup(awanaNow());
+      // Awana 奉獻與制服說明不放在家長專區首頁（只在報名時顯示，報名表與確認信也有）
       h += '<div class="gh">' + t('pz_card') + '</div><div class="pass"><div class="top"><b>WCEC Awana</b><span>' + t('pz_card') + '</span></div>' +
         '<div class="body"><div class="qr" id="qr"></div><div><div class="fam">' + esc(t('p_family_of', { name: f.name })) + '</div>' +
         '<div class="lbl">' + (W.lang() === 'en' ? 'Last 4 of phone' : '手機末四碼') + '</div><div class="val">' + esc(f.last4) + '</div></div></div>' +
