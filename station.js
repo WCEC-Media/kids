@@ -34,8 +34,26 @@
     });
     return rosterReq;
   }
-  loadRoster();
-  setInterval(loadRoster, 2 * 60 * 1000);   // 每 2 分鐘更新一次（新報名的孩子、別台簽到的紀錄）
+  // 收款頁：背景一次下載所有家庭的收款資料，點家庭時立刻顯示（後端還沒更新到有 payAll 時就照舊一家一家讀）
+  var payCache = {}, payAllReq = null, payAllOff = false;
+  function loadPayAll() {
+    if (PAGE !== 'pay' || !key || payAllOff || payAllReq) return;
+    payAllReq = W.call('payAll', { key: key }).then(function (r) {
+      payAllReq = null;
+      if (!r.ok) { if (r.error === 'unknown_action') payAllOff = true; return; }
+      var now = Date.now();
+      Object.keys(r.families || {}).forEach(function (fid) { payCache[fid] = { at: now, data: r.families[fid] }; });
+      // 同工正在看一個還在讀取的家庭：直接補上
+      if (view === 'pay' && pay && pay.loading && payCache[pay.fid]) {
+        keepPayInputs();
+        pay = payCache[pay.fid].data;
+        if (!payForm.amount) payForm.amount = String(pay.suggested || '');
+        render();
+      }
+    });
+  }
+  loadRoster(); loadPayAll();
+  setInterval(function () { loadRoster(); loadPayAll(); }, 2 * 60 * 1000);   // 每 2 分鐘更新一次（新報名的孩子、別台簽到的紀錄）
   document.addEventListener('visibilitychange', function () { if (!document.hidden && Date.now() - rosterAt > 60000) loadRoster(); });
 
   function go(v) { view = v; err = ''; render(); }
@@ -216,7 +234,7 @@
         busy = true; var v = pw.value; render();
         W.call('unlock', { key: v }).then(function (r) {
           busy = false;
-          if (r.ok) { key = v; W.store('wcec_station_key', v); if (r.families) saveRoster(r); else loadRoster(); go('home'); }
+          if (r.ok) { key = v; W.store('wcec_station_key', v); if (r.families) saveRoster(r); else loadRoster(); loadPayAll(); go('home'); }
           else { err = t('ci_' + r.error) || t('e_network'); render(); }
         });
       };
@@ -326,7 +344,6 @@
 
   // 收款：先用這台裝置上的名單立刻顯示家庭和孩子，同工可以馬上開始填；
   // 建議奉獻、制服金額和收款紀錄在背景讀取，讀到就補上（讀過的家庭暫存 5 分鐘，再開是立刻顯示）
-  var payCache = {};
   function openPay(f) {
     payForm = { item: '奉獻', kid: '', amount: '', method: '', check: '', note: '' };
     var hit = payCache[f.fid];

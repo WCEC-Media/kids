@@ -249,6 +249,7 @@ function handle_(req) {
       case 'lookup':       return lookup_(req);
       case 'roster':       return roster_(req);
       case 'payInfo':      return payInfo_(req);
+      case 'payAll':       return payAll_(req);
       case 'payAdd':       return payAdd_(req);
       case 'checkin':      return checkin_(req);
       default:             return { ok: false, error: 'unknown_action' };
@@ -1097,6 +1098,38 @@ function payInfo_(req) {
              at: r['記錄時間'] instanceof Date ? Utilities.formatDate(r['記錄時間'], tz_(s), 'M/d') : String(r['記錄時間'] || '') };
   });
   return { ok: true, year: year, fid: req.fid, family: parentName_(fam), kids: kids, suggested: suggested_(f, kids.length), payee: f.payee, records: recs };
+}
+
+// 收款頁一次下載「今年有報 Awana 的所有家庭」的建議奉獻和收款紀錄（一次讀試算表），
+// 之後同工點哪個家庭都是立刻顯示，不用每家再等一次 Apps Script
+function payAll_(req) {
+  var err = checkStation_(req);
+  if (err) return { ok: false, error: err };
+  var s = settings_(), year = String(s['學年']), f = fees_(s);
+  var gm = {}, um = {};
+  grades_().forEach(function (g) { gm[g.grade] = g.cls; um[g.cls] = g.uniform; });
+  var kidRow = {};
+  rows_(SHEET.KIDS).forEach(function (k) { if (k['狀態'] !== '停用') kidRow[k['孩子編號']] = k; });
+  var kidsBy = {};
+  rows_(SHEET.ENROLL).forEach(function (e) {
+    var k = kidRow[e['孩子編號']];
+    if (String(e['學年']) !== year || e['項目'] !== 'Awana' || e['狀態'] !== '有效' || !k) return;
+    var cls = e['班別'] || gm[String(e['年級'])] || '';
+    (kidsBy[k['家庭編號']] = kidsBy[k['家庭編號']] || []).push({ cid: e['孩子編號'], name: kidName_(k), cls: cls, uniform: um[cls] || 0 });
+  });
+  var recsBy = {};
+  rows_(SHEET.PAY).forEach(function (r) {
+    if (String(r['學年']) !== year || !kidsBy[r['家庭編號']]) return;
+    (recsBy[r['家庭編號']] = recsBy[r['家庭編號']] || []).push({ item: r['項目'], kid: r['孩子'], amount: Number(r['金額']) || 0, method: r['方式'], check: String(r['支票號碼'] || ''), staff: r['收款同工'],
+      at: r['記錄時間'] instanceof Date ? Utilities.formatDate(r['記錄時間'], tz_(s), 'M/d') : String(r['記錄時間'] || '') });
+  });
+  var out = {};
+  rows_(SHEET.FAMILIES).forEach(function (fam) {
+    var fid = fam['家庭編號'], kids = kidsBy[fid];
+    if (!kids) return;
+    out[fid] = { ok: true, year: year, fid: fid, family: parentName_(fam), kids: kids, suggested: suggested_(f, kids.length), payee: f.payee, records: recsBy[fid] || [] };
+  });
+  return { ok: true, families: out };
 }
 
 function payAdd_(req) {
