@@ -63,6 +63,7 @@
     if (W.DEMO) h += '<div class="demo">' + t('demo') + (view === 'locked' ? '（密碼 123456）' : '') + '</div>';
     if (err) h += '<div class="banner err" role="alert">' + esc(err) + '</div>';
     h += views[view]();
+    padState = null;
     app.innerHTML = h;
     (binds[view] || function () {})();
     touch();
@@ -81,17 +82,32 @@
       return '<button type="button" data-k="' + x + '">' + x + '</button>';
     }).join('') + '</div>';
   }
-  function bindPad(max, onFull) {
-    app.querySelectorAll('[data-k]').forEach(function (b) {
-      b.onclick = function () {
-        var k = b.getAttribute('data-k');
-        if (k === 'clr') digits = ''; else if (k === 'del') digits = digits.slice(0, -1);
-        else if (digits.length < max) digits += k;
-        err = ''; notFound = null; render();
-        if (digits.length === max && onFull) onFull();
-      };
-    });
+  // 數字鍵：手指一碰到就算（pointerdown），不用等放開；而且只更新上面的四個格子，
+  // 不整頁重畫——整頁重畫會把按鈕換成新的，快速連按時下一下就會漏掉。
+  var padState = null;   // { max, onFull }，目前畫面有數字鍵時才有
+  function bindPad(max, onFull) { padState = { max: max, onFull: onFull }; }
+  function updatePins() {
+    var pin = app.querySelector('.pin');
+    if (!pin) return;
+    var n = pin.children.length;
+    pin.setAttribute('aria-label', digits);
+    for (var i = 0; i < n; i++) {
+      var c = pin.children[i];
+      c.className = i < digits.length ? 'on' : '';
+      c.textContent = i < digits.length ? digits[i] : '';
+    }
   }
+  app.addEventListener('pointerdown', function (e) {
+    var b = e.target.closest && e.target.closest('[data-k]');
+    if (!b || !padState || busy) return;
+    e.preventDefault();   // 不要觸發點兩下放大、也不要再送一次 click
+    b.classList.add('press'); setTimeout(function () { b.classList.remove('press'); }, 120);
+    var k = b.getAttribute('data-k'), max = padState.max;
+    if (k === 'clr') digits = ''; else if (k === 'del') digits = digits.slice(0, -1);
+    else if (digits.length < max) digits += k;
+    if (err || notFound) { err = ''; notFound = null; render(); } else updatePins();
+    if (digits.length === max && padState.onFull) padState.onFull();
+  });
 
   var views = {
     locked: function () {
@@ -120,12 +136,13 @@
     },
     pay: function () {
       if (!pay) return '<section class="center"><p><span class="spinner"></span> ' + t('pay_loading') + '</p></section>';
+      var ld = pay.loading, wait = '<span class="spinner sm"></span>';
       var d = 0, u = 0;
       pay.records.forEach(function (r) { if (r.item === '制服') u += r.amount; else d += r.amount; });
       var fm = payForm, uniKids = pay.kids.filter(function (k) { return k.uniform; });
       var h = '<section class="paybox"><h2>' + esc(pay.family) + '</h2>' +
         '<p class="meta">' + pay.kids.map(function (k) { return esc(k.name) + ' · ' + esc(k.cls) + (k.uniform ? '（' + t('pay_uniform') + ' $' + k.uniform + '）' : ''); }).join('<br>') + '</p>' +
-        '<div class="stats"><div><span>' + t('pay_sug') + '</span><b>$' + pay.suggested + '</b></div><div><span>' + t('pay_got_d') + '</span><b>$' + d + '</b></div><div><span>' + t('pay_got_u') + '</span><b>$' + u + '</b></div></div>' +
+        '<div class="stats"><div><span>' + t('pay_sug') + '</span><b>' + (ld ? wait : '$' + pay.suggested) + '</b></div><div><span>' + t('pay_got_d') + '</span><b>' + (ld ? wait : '$' + d) + '</b></div><div><span>' + t('pay_got_u') + '</span><b>' + (ld ? wait : '$' + u) + '</b></div></div>' +
         '<h3>' + t('pay_new_h') + '</h3>' +
         '<label class="f">' + t('pay_item') + '</label><div class="seg sm"><button type="button" data-item="奉獻" class="' + (fm.item === '奉獻' ? 'on' : '') + '">' + t('pay_donation') + '</button>' +
         '<button type="button" data-item="制服" class="' + (fm.item === '制服' ? 'on' : '') + '"' + (uniKids.length ? '' : ' disabled') + '>' + t('pay_uniform') + '</button></div>' +
@@ -138,7 +155,7 @@
         '<label class="f" for="pstaff">' + t('pay_staff') + '</label><input type="text" id="pstaff" value="' + esc(W.store('wcec_staff_name') || '') + '">' +
         '<label class="f" for="pnote">' + t('pay_note') + '</label><input type="text" id="pnote" value="' + esc(fm.note) + '">' +
         '<div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button><button class="btn" id="psave"' + (busy ? ' disabled' : '') + '>' + (busy ? t('sending') : t('pay_save')) + '</button></div>' +
-        '<h3>' + t('pay_rec_h') + '</h3>' + (pay.records.length ? '<ul class="recs">' + pay.records.map(function (r) {
+        '<h3>' + t('pay_rec_h') + '</h3>' + (ld ? '<p class="meta">' + wait + ' ' + t('pay_loading') + '</p>' : pay.records.length ? '<ul class="recs">' + pay.records.map(function (r) {
           return '<li><b>$' + r.amount + '</b> ' + esc(r.item === '制服' ? t('pay_uniform') + (r.kid ? '（' + r.kid + '）' : '') : t('pay_donation')) +
             ' · ' + esc(r.method === '支票' ? t('pay_check') + (r.check ? ' #' + r.check : '') : r.method === '現金' ? t('pay_cash') : r.method) +
             '<span class="meta"> · ' + esc(r.staff || '') + ' · ' + esc(r.at || '') + '</span></li>'; }).join('') + '</ul>' : '<p class="meta">' + t('pay_none') + '</p>') +
@@ -194,11 +211,7 @@
     },
     pay: function () {
       if (!pay) return;
-      function keep() {   // 重畫前把輸入框的內容存起來
-        var a = document.getElementById('pamt'), c = document.getElementById('pchk'), n = document.getElementById('pnote'), k = document.getElementById('pkid'), st = document.getElementById('pstaff');
-        if (a) payForm.amount = a.value; if (c) payForm.check = c.value; if (n) payForm.note = n.value; if (k) payForm.kid = k.value;
-        if (st && st.value.trim()) W.store('wcec_staff_name', st.value.trim());
-      }
+      var keep = keepPayInputs;   // 重畫前把輸入框的內容存起來
       app.querySelectorAll('[data-item]').forEach(function (b) {
         b.onclick = function () {
           keep(); payForm.item = b.getAttribute('data-item');
@@ -220,7 +233,7 @@
           method: payForm.method, check: payForm.check, staff: staff, note: payForm.note }).then(function (r) {
           busy = false;
           if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); err = W.errText(r.error); render(); return; }
-          pay = r; W.toast(t('pay_saved', { a: amt }));
+          pay = r; payCache[r.fid] = { at: Date.now(), data: r }; W.toast(t('pay_saved', { a: amt }));
           payForm = { item: '奉獻', kid: '', amount: '', method: '', check: '', note: '' };
           render();
         });
@@ -285,15 +298,34 @@
     });
   }
 
-  // 收款：讀取這個家庭今年報 Awana 的孩子、建議奉獻和收款紀錄
+  // 收款：先用這台裝置上的名單立刻顯示家庭和孩子，同工可以馬上開始填；
+  // 建議奉獻、制服金額和收款紀錄在背景讀取，讀到就補上（讀過的家庭暫存 5 分鐘，再開是立刻顯示）
+  var payCache = {};
   function openPay(f) {
-    pay = null; payForm = { item: '奉獻', kid: '', amount: '', method: '', check: '', note: '' };
+    payForm = { item: '奉獻', kid: '', amount: '', method: '', check: '', note: '' };
+    var hit = payCache[f.fid];
+    if (hit) { pay = hit.data; payForm.amount = String(pay.suggested || ''); }
+    else pay = { fid: f.fid, family: f.label, kids: f.kids.map(function (k) { return { name: k.name, cls: k.cls, uniform: 0 }; }), records: [], suggested: '', loading: true };
     go('pay');
+    if (hit && Date.now() - hit.at < 5 * 60000) return;
     W.call('payInfo', { key: key, fid: f.fid }).then(function (r) {
-      if (view !== 'pay') return;
-      if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); err = W.errText(r.error); view = 'home'; render(); return; }
-      pay = r; payForm.amount = String(r.suggested || ''); render();
+      if (!r.ok) {
+        if (view !== 'pay' || !pay || pay.fid !== f.fid) return;
+        if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r);
+        err = W.errText(r.error); render(); return;
+      }
+      payCache[f.fid] = { at: Date.now(), data: r };
+      if (view !== 'pay' || !pay || pay.fid !== f.fid) return;
+      keepPayInputs();
+      if (!payForm.amount) payForm.amount = String(r.suggested || '');   // 同工還沒自己填金額，才帶入建議奉獻
+      pay = r; render();
     });
+  }
+  // 背景資料回來重畫前，先把同工已經打的字存起來
+  function keepPayInputs() {
+    var a = document.getElementById('pamt'), c = document.getElementById('pchk'), n = document.getElementById('pnote'), k = document.getElementById('pkid'), st = document.getElementById('pstaff');
+    if (a) payForm.amount = a.value; if (c) payForm.check = c.value; if (n) payForm.note = n.value; if (k) payForm.kid = k.value;
+    if (st && st.value.trim()) W.store('wcec_staff_name', st.value.trim());
   }
 
   function pickFamily(f) {

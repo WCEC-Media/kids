@@ -7,7 +7,8 @@
   .pin span.on { border-color: var(--brand); }
   .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 460px; margin: 0 auto; height: auto; border: 0; background: none; border-radius: 0; cursor: default; touch-action: manipulation; }
   .pad button { min-height: 84px; font-size: 36px; font-weight: 800; border-radius: 18px; border: 2px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
-  .pad button:active { background: var(--brand-soft); }
+  .pad button:active, .pad button.press { background: var(--brand-soft); }
+  .pad button { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   .pad .fn { font-size: 22px; }
   .actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
   .actions .btn { min-width: 220px; min-height: 72px; font-size: 24px; }
