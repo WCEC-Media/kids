@@ -32,8 +32,8 @@ var SHEET = {
 
 var PROGRAMS = ['Awana', '主日學'];
 
-// 寄件者顯示名稱：收件匣看到的是這個名字，而不是 app@wcec.church（比較容易被認出來，不會被當成垃圾信）
-var MAIL_FROM_NAME = 'WCEC 兒童事工 Children\'s Ministry';
+// 寄件者顯示名稱與信件主旨用英文：收件匣看到的是這個名字，而不是 app@wcec.church（比較容易被認出來，不會被當成垃圾信）
+var MAIL_FROM_NAME = 'WCEC Children\'s Ministry';
 
 var HEADERS = {
   '設定': ['項目', '值', '說明'],
@@ -893,7 +893,7 @@ function sendLoginMail_(email, link, num, code) {
   MailApp.sendEmail({
     name: MAIL_FROM_NAME,
     to: email,
-    subject: 'WCEC 家長專區登入確認 / Parent sign-in',
+    subject: 'WCEC Parent Area sign-in',
     body: '請按這個連結確認登入：' + link + '\nApp 上的數字應該是 ' + num + '\n或在 App 輸入驗證碼：' + code +
       '\n\nConfirm sign-in: ' + link + '\nThe app should show ' + num + '. Or enter code ' + code +
       '\n\n如果不是您本人操作，請忽略這封信。If this wasn\'t you, ignore this email.',
@@ -910,7 +910,7 @@ function sendInviteMail_(email, inviter) {
   MailApp.sendEmail({
     name: MAIL_FROM_NAME,
     to: email,
-    subject: '您已加入 WCEC 家長專區 / You\'ve been added to WCEC Parent Area',
+    subject: 'You\'ve been added to the WCEC Parent Area',
     body: inviter + ' 已把您加入家庭。打開 WCEC App →「家長專區」，輸入這個 Email 就能登入。\n' +
       inviter + ' added you to their family. Open the WCEC app → Parent Area and sign in with this email.',
     htmlBody: mailShell_('<h2 style="margin:0 0 8px">您已加入家長專區</h2><p><b>' + clean_(inviter) +
@@ -924,7 +924,7 @@ function sendRenewalMail_(email, year, names) {
   MailApp.sendEmail({
     name: MAIL_FROM_NAME,
     to: email,
-    subject: 'WCEC Awana ' + year + ' 開放報名 / Registration is open',
+    subject: 'WCEC Awana ' + year + ' registration is open',
     body: year + ' 學年的 Awana／主日學開放報名了！不用重填表：打開 WCEC App →「家長專區」，勾選要參加的孩子、簽名就完成了。\n' + link +
       '\n\nAwana / Sunday School ' + year + ' registration is open. Open the WCEC app → Parent Area, check the children who will attend, and sign.',
     htmlBody: mailShell_('<h2 style="margin:0 0 8px">' + year + ' Awana／主日學開放報名了！</h2>' +
@@ -942,7 +942,7 @@ function sendConfirm_(email, kids, year, fid, s) {
     MailApp.sendEmail({
     name: MAIL_FROM_NAME,
       to: email,
-      subject: 'WCEC Awana／主日學 ' + year + ' 報名成功 / Registration received',
+      subject: 'WCEC Awana / Sunday School ' + year + ' registration received',
       body: '謝謝您報名！\nThank you for registering!\n\n' + list + feeText_(fid, year, s) +
         '\n\nAwana 簽到時，在前台 iPad 輸入您手機號碼的末四碼即可。\n' +
         'For Awana check-in, enter the last 4 digits of your phone number at the front desk iPad.\n\n' +
