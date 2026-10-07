@@ -32,6 +32,9 @@ var SHEET = {
 
 var PROGRAMS = ['Awana', '主日學'];
 
+// 寄件者顯示名稱：收件匣看到的是這個名字，而不是 app@wcec.church（比較容易被認出來，不會被當成垃圾信）
+var MAIL_FROM_NAME = 'WCEC 兒童事工 Children\'s Ministry';
+
 var HEADERS = {
   '設定': ['項目', '值', '說明'],
   '班別': ['年級', '班別', '制服價格'],
@@ -888,6 +891,7 @@ function mailButton_(href, label) {
 
 function sendLoginMail_(email, link, num, code) {
   MailApp.sendEmail({
+    name: MAIL_FROM_NAME,
     to: email,
     subject: 'WCEC 家長專區登入確認 / Parent sign-in',
     body: '請按這個連結確認登入：' + link + '\nApp 上的數字應該是 ' + num + '\n或在 App 輸入驗證碼：' + code +
@@ -904,6 +908,7 @@ function sendLoginMail_(email, link, num, code) {
 
 function sendInviteMail_(email, inviter) {
   MailApp.sendEmail({
+    name: MAIL_FROM_NAME,
     to: email,
     subject: '您已加入 WCEC 家長專區 / You\'ve been added to WCEC Parent Area',
     body: inviter + ' 已把您加入家庭。打開 WCEC App →「家長專區」，輸入這個 Email 就能登入。\n' +
@@ -917,6 +922,7 @@ function sendInviteMail_(email, inviter) {
 function sendRenewalMail_(email, year, names) {
   var link = baseUrl_() + 'parent.html';
   MailApp.sendEmail({
+    name: MAIL_FROM_NAME,
     to: email,
     subject: 'WCEC Awana ' + year + ' 開放報名 / Registration is open',
     body: year + ' 學年的 Awana／主日學開放報名了！不用重填表：打開 WCEC App →「家長專區」，勾選要參加的孩子、簽名就完成了。\n' + link +
@@ -934,6 +940,7 @@ function sendConfirm_(email, kids, year, fid, s) {
   try {
     var list = kids.map(function (k) { return '・' + k.name + '（' + k.programs.join('、') + '）'; }).join('\n');
     MailApp.sendEmail({
+    name: MAIL_FROM_NAME,
       to: email,
       subject: 'WCEC Awana／主日學 ' + year + ' 報名成功 / Registration received',
       body: '謝謝您報名！\nThank you for registering!\n\n' + list + feeText_(fid, year, s) +
