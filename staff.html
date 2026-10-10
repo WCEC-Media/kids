@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>兒童同工專區 | WCEC</title>
-<link rel="stylesheet" href="style.css?v=20261006a">
-<link rel="stylesheet" href="ios.css?v=20261006a">
+<link rel="stylesheet" href="style.css?v=20261010a">
+<link rel="stylesheet" href="ios.css?v=20261010a">
 <style>
   /* 同工專區：簽到、簽退、收款的入口（App 兒童事工頁右上角的圖示會打開這一頁） */
   .wrap { max-width: 560px; }
@@ -34,7 +34,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261006a"></script>
+<script src="common.js?v=20261010a"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -100,7 +100,7 @@
     }
     h += '<p class="lead">' + esc(S.lead) + '</p>' +
       '<a class="tile" href="' + W.link('checkin.html') + '"><span class="ic" style="background:#2f7f86">' + IC.checkin + '</span><span><b>' + esc(S.ci) + '</b><span class="d">' + esc(S.ciD) + '</span></span>' + CHEV + '</a>' +
-      '<div class="tile off" aria-disabled="true"><span class="ic" style="background:#8b6f47">' + IC.checkout + '</span><span><b>' + esc(S.co) + '<span class="soon">' + esc(S.soon) + '</span></b><span class="d">' + esc(S.coD) + '</span></span>' + CHEV + '</div>' +
+      '<a class="tile" href="' + W.link('checkout.html') + '"><span class="ic" style="background:#8b6f47">' + IC.checkout + '</span><span><b>' + esc(S.co) + '</b><span class="d">' + esc(S.coD) + '</span></span>' + CHEV + '</a>' +
       '<a class="tile" href="' + W.link('pay.html') + '"><span class="ic" style="background:#b07a1f">' + IC.pay + '</span><span><b>' + esc(S.pay) + '</b><span class="d">' + esc(S.payD) + '</span></span>' + CHEV + '</a>' +
       '<button class="lockbtn" id="lock" type="button">' + IC.lock + esc(S.lock) + '</button><p class="note">' + esc(S.lockedNote) + '</p>';
     app.innerHTML = h;

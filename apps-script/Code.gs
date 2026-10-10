@@ -255,6 +255,8 @@ function handle_(req) {
       case 'payAll':       return payAll_(req);
       case 'payAdd':       return payAdd_(req);
       case 'checkin':      return checkin_(req);
+      case 'checkoutInfo': return checkoutInfo_(req);
+      case 'checkout':     return checkout_(req);
       default:             return { ok: false, error: 'unknown_action' };
     }
   } catch (err) {
@@ -1039,6 +1041,55 @@ function buildRoster_() {
     return digits_(f['手機']).slice(-4) || ('0000' + String(f['手機末四碼'] || '')).slice(-4);
   });
   return { families: out, others: others, showCode: isTrue_(s['顯示接送碼']) };
+}
+
+// ───────────────────────── 簽退（同工核對接送碼或接送人後才完成）─────────────────────────
+// 只給簽到站（要密碼）用：這個家庭今天簽到的孩子、接送碼、可以接送的人（只有姓名和關係，不給電話）
+function checkoutInfo_(req) {
+  var err = checkStation_(req);
+  if (err) return { ok: false, error: err };
+  var s = settings_(), today = todayStr_(s);
+  var fam = rows_(SHEET.FAMILIES).filter(function (f) { return f['家庭編號'] === req.fid; })[0];
+  if (!fam) return { ok: false, error: 'not_found' };
+  var log = {}, codes = [];
+  rows_(SHEET.LOG).forEach(function (r) {
+    if (r['家庭編號'] !== req.fid || dateStr_(r['日期'], s) !== today) return;
+    log[r['孩子編號']] = r;
+    if (r['接送碼'] && codes.indexOf(String(r['接送碼'])) < 0) codes.push(String(r['接送碼']));
+  });
+  var kids = activeKids_(s).filter(function (k) { return k.fid === req.fid; }).map(function (k) {
+    var r = log[k.cid];
+    return { cid: k.cid, name: k.name, cls: k.cls, checkedIn: !!r, checkedOut: !!(r && r['簽退時間']),
+             outAt: r && r['簽退時間'] instanceof Date ? Utilities.formatDate(r['簽退時間'], tz_(s), 'h:mm a') : '' };
+  });
+  function person(first, last, rel) { return { name: fullName_(first, last), relation: rel || '' }; }
+  var people = [person(fam['家長 First Name'], fam['家長 Last Name'], fam['關係'])];
+  if (fam['第二家長 First Name']) people.push(person(fam['第二家長 First Name'], fam['第二家長 Last Name'], fam['第二家長關係']));
+  pickupsOf_(fam).forEach(function (p) { if (p.first) people.push(person(p.first, p.last, p.relation)); });   // 不回傳電話
+  return { ok: true, fid: req.fid, family: parentName_(fam), kids: kids, codes: codes, showCode: isTrue_(s['顯示接送碼']), people: people };
+}
+
+function checkout_(req) {
+  var err = checkStation_(req);
+  if (err) return { ok: false, error: err };
+  var cids = req.cids || [], staff = clean_(req.staff);
+  if (!req.fid || !cids.length || !staff || req.verified !== true) return { ok: false, error: 'invalid' };   // 一定要同工確認已核對
+  var s = settings_(), today = todayStr_(s), now = new Date();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  dirty_();
+  try {
+    var done = [];
+    rows_(SHEET.LOG).forEach(function (r) {
+      if (r['家庭編號'] !== req.fid || dateStr_(r['日期'], s) !== today || cids.indexOf(r['孩子編號']) < 0) return;
+      if (!r['簽退時間']) {
+        setCell_(SHEET.LOG, r._row, '簽退時間', now);
+        setCell_(SHEET.LOG, r._row, '簽退同工', staff);
+      }
+      done.push({ name: r['孩子姓名'], cls: r['班別'] });
+    });
+    return { ok: true, kids: done };
+  } finally { lock.releaseLock(); }
 }
 
 function checkin_(req) {

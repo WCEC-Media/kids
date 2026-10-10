@@ -5,7 +5,9 @@
   var key = W.store('wcec_station_key') || '';
   var view = key ? 'home' : 'locked';
   var digits = '', families = [], fam = null, picked = {}, done = null, err = '', busy = false, via = 'phone';
-  var PAGE = document.body.getAttribute('data-mode') === 'pay' ? 'pay' : 'checkin';   // checkin.html／pay.html
+  var DM = document.body.getAttribute('data-mode');
+  var PAGE = DM === 'pay' ? 'pay' : DM === 'checkout' ? 'checkout' : 'checkin';   // checkin.html／checkout.html／pay.html
+  var co = null, coPick = {}, coVerified = false;   // 簽退：這個家庭今天的簽到、勾選的孩子、同工是否已核對
   var mode = PAGE, pay = null, payForm = { item: '奉獻', kid: '', amount: '', method: '', check: '', note: '' };
   var idleTimer = null, countdown = 0, cdTimer = null, scanner = null;
   // 名單快取：解鎖後先下載今年的家庭和孩子，輸入末四碼時直接在這台裝置上找，不用等網路
@@ -63,12 +65,12 @@
   document.addEventListener('visibilitychange', function () { if (!document.hidden && Date.now() - rosterAt > 60000) loadRoster(); });
 
   function go(v) { view = v; err = ''; render(); }
-  function reset() { mode = PAGE; pay = null; notFound = null; digits = ''; families = []; fam = null; picked = {}; done = null; stopScan(); go(key ? 'home' : 'locked'); }
+  function reset() { mode = PAGE; pay = null; co = null; coPick = {}; coVerified = false; notFound = null; digits = ''; families = []; fam = null; picked = {}; done = null; stopScan(); go(key ? 'home' : 'locked'); }
 
   // 沒人操作 60 秒就回首頁，避免下一位看到上一家的孩子
   function touch() {
     clearTimeout(idleTimer);
-    if (view === 'families' || view === 'kids' || view === 'scan') idleTimer = setTimeout(reset, 60000);
+    if (view === 'families' || view === 'kids' || view === 'scan' || view === 'co') idleTimer = setTimeout(reset, 60000);
     if (view === 'pay' || (view === 'home' && mode === 'pay')) idleTimer = setTimeout(reset, 3 * 60000);   // 收款畫面 3 分鐘沒動作也回到簽到
   }
   document.addEventListener('pointerdown', touch);
@@ -80,7 +82,7 @@
   function render() {
     document.getElementById('lang').textContent = t('lang_btn');
     document.getElementById('staff').textContent = view === 'locked' ? '' : t('ci_staff');
-    var title = t(PAGE === 'pay' ? 'pay_title' : 'ci_title');
+    var title = t(PAGE === 'pay' ? 'pay_title' : PAGE === 'checkout' ? 'co_title' : 'ci_title');
     document.title = title + ' | WCEC';
     try { if (window.WCECApp && window.WCECApp.postMessage) window.WCECApp.postMessage(JSON.stringify({ type: 'title', title: title })); } catch (e) {}
     var h = '<header class="top center" style="justify-content:center"><div><h1>' + title + '</h1><p class="today">' + esc(today()) + '</p></div></header>';
@@ -172,7 +174,10 @@
         (busy ? '<div class="searching"><span class="spinner"></span> ' + esc(t('ci_searching')) + ' <button type="button" class="btn ghost small" id="cancelq">' + t('ci_cancel') + '</button></div>' : '') +
         '<p class="pinhint">' + esc(t(TOUCH ? 'ci_tap' : 'ci_type')) + '</p>' +
         '<div class="' + (busy ? 'dim' : '') + '">' + pad() + '</div>' +
-        '<div class="actions"><button class="btn ghost" id="scan"' + (busy ? ' disabled' : '') + '>📷 ' + t('ci_scan') + '</button></div>' + st + '</section>';
+        '<div class="actions"><button class="btn ghost" id="scan"' + (busy ? ' disabled' : '') + '>📷 ' + t('ci_scan') + '</button></div>' + st +
+        // 前台 iPad：簽到、簽退兩頁互相切換（App 裡從兒童同工專區進來，不顯示）
+        (!W.EMBED && PAGE !== 'pay' ? '<p class="switch"><a href="' + W.link(PAGE === 'checkout' ? 'checkin.html' : 'checkout.html') + '">' +
+          esc(PAGE === 'checkout' ? t('ci_title') : t('co_title')) + ' →</a></p>' : '') + '</section>';
     },
     scan: function () {
       return '<section class="center"><h2>' + t('ci_scan') + '</h2><p>' + t('ci_scan_hint') + '</p><div id="reader"></div>' +
@@ -212,6 +217,32 @@
         '</section>';
       return h;
     },
+    co: function () {
+      if (!co || co.loading) return '<section class="center"><h2>' + esc(co ? co.family : '') + '</h2><p><span class="spinner"></span> ' + t('co_loading') + '</p>' +
+        '<div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button></div></section>';
+      var n = Object.keys(coPick).filter(function (c) { return coPick[c]; }).length;
+      var anyIn = co.kids.some(function (k) { return k.checkedIn; });
+      var h = '<section class="cobox"><h2 class="center">' + esc(co.family) + '</h2>';
+      if (!anyIn) return h + '<div class="nf"><p>' + t('co_none_in') + '</p></div><div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button></div></section>';
+      // 1. 接送碼：家長出示的號碼要跟這裡一樣
+      h += '<div class="codebox"><p>' + t('co_code_h') + '</p>' + (co.codes.length ? '<div class="code">' + co.codes.map(esc).join(' / ') + '</div>' : '<p class="meta">' + t('co_code_none') + '</p>') + '</div>';
+      // 2. 可以接送的人（只有姓名和關係）
+      h += '<h3>' + t('co_people_h') + '</h3><ul class="people">' + co.people.map(function (p) {
+        return '<li><b>' + esc(p.name) + '</b>' + (p.relation ? ' · ' + esc(W.relationLabel ? W.relationLabel(p.relation) : p.relation) : '') + '</li>'; }).join('') + '</ul>';
+      // 3. 孩子
+      h += '<h3>' + t('co_pick') + '</h3>' + co.kids.map(function (k) {
+        var can = k.checkedIn && !k.checkedOut, on = can && !!coPick[k.cid];
+        return '<button class="kidbtn' + (on ? ' on' : '') + '" data-co="' + esc(k.cid) + '"' + (can ? '' : ' disabled') + ' aria-pressed="' + on + '">' +
+          '<span class="box">' + (on || k.checkedOut ? '✓' : '') + '</span><span><div class="nm">' + esc(k.name) + '</div>' +
+          '<div class="meta">' + esc(k.cls || '') + (k.checkedOut ? ' · ' + esc(t('co_out_at', { t: k.outAt })) : !k.checkedIn ? ' · ' + t('co_not_in') : '') + '</div></span></button>';
+      }).join('');
+      // 4. 同工確認
+      h += '<label class="verify"><input type="checkbox" id="coverify"' + (coVerified ? ' checked' : '') + '><span>' + t('co_verify') + '</span></label>' +
+        '<label class="f" for="costaff">' + t('co_staff') + '</label><input type="text" id="costaff" value="' + esc(W.store('wcec_staff_name') || '') + '">' +
+        '<div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button>' +
+        '<button class="btn" id="cogo"' + (n && !busy ? '' : ' disabled') + '>' + (busy ? t('sending') : t('co_go') + (n ? '（' + n + '）' : '')) + '</button></div></section>';
+      return h;
+    },
     kids: function () {
       var n = Object.keys(picked).filter(function (k) { return picked[k]; }).length;
       return '<section><h2 class="center">' + t('ci_pick_kids') + '</h2>' + fam.kids.map(function (k) {
@@ -224,7 +255,7 @@
         '<button class="btn" id="go"' + (n && !busy ? '' : ' disabled') + '>' + t('ci_go') + (n ? '（' + n + '）' : '') + '</button></div></section>';
     },
     done: function () {
-      return '<section class="card center"><div style="font-size:64px" aria-hidden="true">✅</div><h2>' + t('ci_done') + '</h2>' +
+      return '<section class="card center"><div style="font-size:64px" aria-hidden="true">✅</div><h2>' + t(done.out ? 'co_done' : 'ci_done') + '</h2>' +
         '<ul class="kids-done">' + done.kids.map(function (k) { return '<li><b>' + esc(k.name) + '</b>' + (k.cls ? ' · ' + esc(k.cls) : '') + '</li>'; }).join('') + '</ul>' +
         (done.code ? '<p style="margin:18px 0 0">' + t('ci_code') + '</p><div class="code">' + esc(done.code) + '</div><p class="hint">' + t('ci_code_hint') + '</p>'
           : done.pending && showCode ? '<p style="margin:18px 0 0">' + t('ci_code') + '</p><div class="code"><span class="spinner"></span></div>' : '') +
@@ -286,6 +317,33 @@
           pay = r; payCache[r.fid] = { at: Date.now(), data: r }; W.toast(t('pay_saved', { a: amt }));
           payForm = { item: '奉獻', kid: '', amount: '', method: '', check: '', note: '' };
           render();
+        });
+      };
+    },
+    co: function () {
+      document.getElementById('back').onclick = function () { families.length > 1 && co && !co.loading ? (co = null, go('families')) : reset(); };
+      if (!co || co.loading) return;
+      function keep() {
+        var v = document.getElementById('coverify'), st = document.getElementById('costaff');
+        if (v) coVerified = v.checked;
+        if (st && st.value.trim()) W.store('wcec_staff_name', st.value.trim());
+      }
+      app.querySelectorAll('[data-co]').forEach(function (b) {
+        b.onclick = function () { keep(); var c = b.getAttribute('data-co'); coPick[c] = !coPick[c]; render(); };
+      });
+      var v = document.getElementById('coverify'); if (v) v.onchange = keep;
+      var go2 = document.getElementById('cogo');
+      if (go2) go2.onclick = function () {
+        keep();
+        var staff = W.store('wcec_staff_name') || '', cids = Object.keys(coPick).filter(function (c) { return coPick[c]; });
+        if (!coVerified || !staff) { err = t('co_need'); render(); return; }
+        busy = true; render();
+        W.call('checkout', { key: key, fid: co.fid, cids: cids, staff: staff, verified: true }).then(function (r) {
+          busy = false;
+          if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); err = W.errText(r.error); render(); return; }
+          done = { kids: r.kids, out: true }; countdown = 15; go('done');
+          clearInterval(cdTimer);
+          cdTimer = setInterval(function () { countdown--; if (countdown <= 0) finish(); else if (view === 'done') render(); }, 1000);
         });
       };
     },
@@ -377,8 +435,22 @@
     if (st && st.value.trim()) W.store('wcec_staff_name', st.value.trim());
   }
 
+  // 簽退：跟後端讀這個家庭今天的簽到、接送碼、可以接送的人
+  function openCheckout(f) {
+    co = { loading: true, family: f.label, fid: f.fid }; coPick = {}; coVerified = false;
+    go('co');
+    W.call('checkoutInfo', { key: key, fid: f.fid }).then(function (r) {
+      if (view !== 'co' || !co || co.fid !== f.fid) return;
+      if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); err = W.errText(r.error); co = null; view = 'home'; render(); return; }
+      co = r;
+      r.kids.forEach(function (k) { if (k.checkedIn && !k.checkedOut) coPick[k.cid] = true; });   // 預設全選還沒簽退的孩子
+      render();
+    });
+  }
+
   function pickFamily(f) {
     if (mode === 'pay') return openPay(f);
+    if (PAGE === 'checkout') return openCheckout(f);
     fam = f; picked = {};
     f.kids.forEach(function (k) { if (!k.checkedIn) picked[k.cid] = true; });   // 預設全選還沒簽到的孩子
     go('kids');
