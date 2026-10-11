@@ -65,8 +65,6 @@
 /* 簽退 */
 .cobox { max-width: 620px; margin: 0 auto; }
 .cobox h3 { margin: 22px 0 6px; }
-.codebox { text-align: center; background: var(--card); border: 3px solid var(--brand); border-radius: 18px; padding: 14px; margin-top: 8px; }
-.codebox p { margin: 0; font-weight: 700; }
 .people { list-style: none; padding: 0; margin: 4px 0; } .people li { padding: 8px 0; border-bottom: 1px solid var(--line); }
 .verify { display: flex; gap: 14px; align-items: center; margin: 20px 0 4px; font-weight: 700; cursor: pointer; }
 .verify input { width: 30px; height: 30px; flex: 0 0 30px; accent-color: var(--brand); }

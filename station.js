@@ -218,25 +218,15 @@
       return h;
     },
     co: function () {
-      if (!co || co.loading) return '<section class="center"><h2>' + esc(co ? co.family : '') + '</h2><p><span class="spinner"></span> ' + t('co_loading') + '</p>' +
-        '<div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button></div></section>';
       var n = Object.keys(coPick).filter(function (c) { return coPick[c]; }).length;
       var anyIn = co.kids.some(function (k) { return k.checkedIn; });
-      var h = '<section class="cobox"><h2 class="center">' + esc(co.family) + '</h2>';
-      if (!anyIn) return h + '<div class="nf"><p>' + t('co_none_in') + '</p></div><div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button></div></section>';
-      // 1. 接送碼：家長出示的號碼要跟這裡一樣
-      h += '<div class="codebox"><p>' + t('co_code_h') + '</p>' + (co.codes.length ? '<div class="code">' + co.codes.map(esc).join(' / ') + '</div>' : '<p class="meta">' + t('co_code_none') + '</p>') + '</div>';
-      // 2. 可以接送的人（只有姓名和關係）
-      h += '<h3>' + t('co_people_h') + '</h3><ul class="people">' + co.people.map(function (p) {
-        return '<li><b>' + esc(p.name) + '</b>' + (p.relation ? ' · ' + esc(W.relationLabel ? W.relationLabel(p.relation) : p.relation) : '') + '</li>'; }).join('') + '</ul>';
-      // 3. 孩子
-      h += '<h3>' + t('co_pick') + '</h3>' + co.kids.map(function (k) {
-        var can = k.checkedIn && !k.checkedOut, on = can && !!coPick[k.cid];
-        return '<button class="kidbtn' + (on ? ' on' : '') + '" data-co="' + esc(k.cid) + '"' + (can ? '' : ' disabled') + ' aria-pressed="' + on + '">' +
-          '<span class="box">' + (on || k.checkedOut ? '✓' : '') + '</span><span><div class="nm">' + esc(k.name) + '</div>' +
-          '<div class="meta">' + esc(k.cls || '') + (k.checkedOut ? ' · ' + esc(t('co_out_at', { t: k.outAt })) : !k.checkedIn ? ' · ' + t('co_not_in') : '') + '</div></span></button>';
-      }).join('');
-      // 4. 同工確認
+      var h = '<section class="cobox"><h2 class="center" id="cofam">' + esc(co.family) + '</h2>';
+      if (!anyIn && !co.partial) return h + '<div class="nf"><p>' + t('co_none_in') + '</p></div><div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button></div></section>';
+      // 1. 孩子（名單在這台裝置上，立刻顯示）
+      h += '<h3>' + t('co_pick') + '</h3><div id="cokids">' + coKidsHtml() + '</div>';
+      // 2. 可以接送的人（只有姓名和關係；背景跟後端讀，讀到之前先轉圈）
+      h += '<h3>' + t('co_people_h') + '</h3><div id="copeople">' + coPeopleHtml() + '</div>';
+      // 3. 同工確認
       h += '<label class="verify"><input type="checkbox" id="coverify"' + (coVerified ? ' checked' : '') + '><span>' + t('co_verify') + '</span></label>' +
         '<label class="f" for="costaff">' + t('co_staff') + '</label><input type="text" id="costaff" value="' + esc(W.store('wcec_staff_name') || '') + '">' +
         '<div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button>' +
@@ -321,16 +311,13 @@
       };
     },
     co: function () {
-      document.getElementById('back').onclick = function () { families.length > 1 && co && !co.loading ? (co = null, go('families')) : reset(); };
-      if (!co || co.loading) return;
+      document.getElementById('back').onclick = function () { families.length > 1 ? (co = null, go('families')) : reset(); };
       function keep() {
         var v = document.getElementById('coverify'), st = document.getElementById('costaff');
         if (v) coVerified = v.checked;
         if (st && st.value.trim()) W.store('wcec_staff_name', st.value.trim());
       }
-      app.querySelectorAll('[data-co]').forEach(function (b) {
-        b.onclick = function () { keep(); var c = b.getAttribute('data-co'); coPick[c] = !coPick[c]; render(); };
-      });
+      bindCoKids();
       var v = document.getElementById('coverify'); if (v) v.onchange = keep;
       var go2 = document.getElementById('cogo');
       if (go2) go2.onclick = function () {
@@ -435,16 +422,57 @@
     if (st && st.value.trim()) W.store('wcec_staff_name', st.value.trim());
   }
 
-  // 簽退：跟後端讀這個家庭今天的簽到、接送碼、可以接送的人
+  // 簽退：孩子和今天有沒有簽到用這台裝置上的名單，立刻顯示；
+  // 可以接送的人、有沒有已經簽退，背景跟後端讀，讀到再補上（不整頁重畫，同工正在打的名字不會被打斷）
+  function coKidsHtml() {
+    return co.kids.map(function (k) {
+      // 還在跟後端確認時，這台裝置上的名單可能比較舊（別台 iPad 簽到的），先讓每個孩子都能點
+      var can = co.partial ? !k.checkedOut : k.checkedIn && !k.checkedOut, on = can && !!coPick[k.cid];
+      return '<button class="kidbtn' + (on ? ' on' : '') + '" data-co="' + esc(k.cid) + '"' + (can ? '' : ' disabled') + ' aria-pressed="' + on + '">' +
+        '<span class="box">' + (on || k.checkedOut ? '✓' : '') + '</span><span><div class="nm">' + esc(k.name) + '</div>' +
+        '<div class="meta">' + esc(k.cls || '') + (k.checkedOut ? ' · ' + esc(t('co_out_at', { t: k.outAt })) : !k.checkedIn && !co.partial ? ' · ' + t('co_not_in') : '') + '</div></span></button>';
+    }).join('');
+  }
+  function coPeopleHtml() {
+    if (!co.people) return '<p class="meta"><span class="spinner sm"></span> ' + t('co_loading') + '</p>';
+    return '<ul class="people">' + co.people.map(function (p) {
+      return '<li><b>' + esc(p.name) + '</b>' + (p.relation ? ' · ' + esc(W.relationLabel ? W.relationLabel(p.relation) : p.relation) : '') + '</li>'; }).join('') + '</ul>';
+  }
+  function coCount() { return Object.keys(coPick).filter(function (c) { return coPick[c]; }).length; }
+  function updCoButton() {
+    var b = document.getElementById('cogo'), n = coCount();
+    if (b) { b.disabled = !n || busy; b.textContent = busy ? t('sending') : t('co_go') + (n ? '（' + n + '）' : ''); }
+  }
+  function bindCoKids() {
+    app.querySelectorAll('[data-co]').forEach(function (b) {
+      b.onclick = function () {
+        var c = b.getAttribute('data-co'); coPick[c] = !coPick[c];
+        var box = document.getElementById('cokids'); if (box) { box.innerHTML = coKidsHtml(); bindCoKids(); }
+        updCoButton(); touch();
+      };
+    });
+  }
   function openCheckout(f) {
-    co = { loading: true, family: f.label, fid: f.fid }; coPick = {}; coVerified = false;
+    co = { fid: f.fid, family: f.label, partial: true, people: null,
+           kids: f.kids.map(function (k) { return { cid: k.cid, name: k.name, cls: k.cls, checkedIn: !!k.checkedIn, checkedOut: false, outAt: '' }; }) };
+    coPick = {}; coVerified = false;
+    var localIn = co.kids.filter(function (k) { return k.checkedIn; });
+    (localIn.length ? localIn : co.kids).forEach(function (k) { coPick[k.cid] = true; });   // 預設全選今天有簽到的孩子
     go('co');
     W.call('checkoutInfo', { key: key, fid: f.fid }).then(function (r) {
       if (view !== 'co' || !co || co.fid !== f.fid) return;
-      if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); err = W.errText(r.error); co = null; view = 'home'; render(); return; }
-      co = r;
-      r.kids.forEach(function (k) { if (k.checkedIn && !k.checkedOut) coPick[k.cid] = true; });   // 預設全選還沒簽退的孩子
-      render();
+      if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); co.people = []; var pp = document.getElementById('copeople'); if (pp) pp.innerHTML = '<p class="meta">' + esc(W.errText(r.error)) + '</p>'; return; }
+      co.partial = false; co.people = r.people; co.family = r.family || co.family;
+      co.kids = r.kids;
+      // 後端說已經簽退或今天沒簽到的孩子，取消勾選
+      Object.keys(coPick).forEach(function (c) { var k = r.kids.filter(function (x) { return x.cid === c; })[0]; if (!k || !k.checkedIn || k.checkedOut) delete coPick[c]; });
+      r.kids.forEach(function (k) { if (k.checkedIn && !k.checkedOut && coPick[k.cid] === undefined) coPick[k.cid] = true; });
+      if (!r.kids.some(function (k) { return k.checkedIn; })) { render(); return; }   // 今天沒有孩子簽到：顯示提示
+      var fam = document.getElementById('cofam'), kb = document.getElementById('cokids'), pp2 = document.getElementById('copeople');
+      if (fam) fam.textContent = co.family;
+      if (kb) { kb.innerHTML = coKidsHtml(); bindCoKids(); }
+      if (pp2) pp2.innerHTML = coPeopleHtml();
+      updCoButton();
     });
   }
 

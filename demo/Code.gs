@@ -1043,19 +1043,17 @@ function buildRoster_() {
   return { families: out, others: others, showCode: isTrue_(s['顯示接送碼']) };
 }
 
-// ───────────────────────── 簽退（同工核對接送碼或接送人後才完成）─────────────────────────
-// 只給簽到站（要密碼）用：這個家庭今天簽到的孩子、接送碼、可以接送的人（只有姓名和關係，不給電話）
+// ───────────────────────── 簽退（同工核對接送人身分後才完成）─────────────────────────
+// 只給簽到站（要密碼）用：這個家庭今天簽到的孩子、可以接送的人（只有姓名和關係，不給電話）
 function checkoutInfo_(req) {
   var err = checkStation_(req);
   if (err) return { ok: false, error: err };
   var s = settings_(), today = todayStr_(s);
   var fam = rows_(SHEET.FAMILIES).filter(function (f) { return f['家庭編號'] === req.fid; })[0];
   if (!fam) return { ok: false, error: 'not_found' };
-  var log = {}, codes = [];
+  var log = {};
   rows_(SHEET.LOG).forEach(function (r) {
-    if (r['家庭編號'] !== req.fid || dateStr_(r['日期'], s) !== today) return;
-    log[r['孩子編號']] = r;
-    if (r['接送碼'] && codes.indexOf(String(r['接送碼'])) < 0) codes.push(String(r['接送碼']));
+    if (r['家庭編號'] === req.fid && dateStr_(r['日期'], s) === today) log[r['孩子編號']] = r;
   });
   var kids = activeKids_(s).filter(function (k) { return k.fid === req.fid; }).map(function (k) {
     var r = log[k.cid];
@@ -1066,7 +1064,7 @@ function checkoutInfo_(req) {
   var people = [person(fam['家長 First Name'], fam['家長 Last Name'], fam['關係'])];
   if (fam['第二家長 First Name']) people.push(person(fam['第二家長 First Name'], fam['第二家長 Last Name'], fam['第二家長關係']));
   pickupsOf_(fam).forEach(function (p) { if (p.first) people.push(person(p.first, p.last, p.relation)); });   // 不回傳電話
-  return { ok: true, fid: req.fid, family: parentName_(fam), kids: kids, codes: codes, showCode: isTrue_(s['顯示接送碼']), people: people };
+  return { ok: true, fid: req.fid, family: parentName_(fam), kids: kids, people: people };
 }
 
 function checkout_(req) {
