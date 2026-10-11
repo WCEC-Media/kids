@@ -228,7 +228,6 @@
       h += '<h3>' + t('co_people_h') + '</h3><div id="copeople">' + coPeopleHtml() + '</div>';
       // 3. 同工確認
       h += '<label class="verify"><input type="checkbox" id="coverify"' + (coVerified ? ' checked' : '') + '><span>' + t('co_verify') + '</span></label>' +
-        '<label class="f" for="costaff">' + t('co_staff') + '</label><input type="text" id="costaff" value="' + esc(W.store('wcec_staff_name') || '') + '">' +
         '<div class="actions"><button class="btn ghost" id="back">' + t('ci_back') + '</button>' +
         '<button class="btn" id="cogo"' + (n && !busy ? '' : ' disabled') + '>' + (busy ? t('sending') : t('co_go') + (n ? '（' + n + '）' : '')) + '</button></div></section>';
       return h;
@@ -312,20 +311,16 @@
     },
     co: function () {
       document.getElementById('back').onclick = function () { families.length > 1 ? (co = null, go('families')) : reset(); };
-      function keep() {
-        var v = document.getElementById('coverify'), st = document.getElementById('costaff');
-        if (v) coVerified = v.checked;
-        if (st && st.value.trim()) W.store('wcec_staff_name', st.value.trim());
-      }
+      function keep() { var v = document.getElementById('coverify'); if (v) coVerified = v.checked; }
       bindCoKids();
       var v = document.getElementById('coverify'); if (v) v.onchange = keep;
       var go2 = document.getElementById('cogo');
       if (go2) go2.onclick = function () {
         keep();
-        var staff = W.store('wcec_staff_name') || '', cids = Object.keys(coPick).filter(function (c) { return coPick[c]; });
-        if (!coVerified || !staff) { err = t('co_need'); render(); return; }
+        var cids = Object.keys(coPick).filter(function (c) { return coPick[c]; });
+        if (!coVerified) { err = t('co_need'); render(); return; }
         busy = true; render();
-        W.call('checkout', { key: key, fid: co.fid, cids: cids, staff: staff, verified: true }).then(function (r) {
+        W.call('checkout', { key: key, fid: co.fid, cids: cids, verified: true }).then(function (r) {
           busy = false;
           if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); err = W.errText(r.error); render(); return; }
           done = { kids: r.kids, out: true }; countdown = 15; go('done');

@@ -1071,7 +1071,7 @@ function checkout_(req) {
   var err = checkStation_(req);
   if (err) return { ok: false, error: err };
   var cids = req.cids || [], staff = clean_(req.staff);
-  if (!req.fid || !cids.length || !staff || req.verified !== true) return { ok: false, error: 'invalid' };   // 一定要同工確認已核對
+  if (!req.fid || !cids.length || req.verified !== true) return { ok: false, error: 'invalid' };   // 一定要同工確認已核對接送人（同工名字不用填）
   var s = settings_(), today = todayStr_(s), now = new Date();
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
