@@ -345,7 +345,7 @@
 
   function localFind(q) {
     return roster.filter(function (f) { return q.qr ? f.qr && f.qr === String(q.qr).trim() : f.last4 === q.last4; })
-      .map(function (f) { return { fid: f.fid, label: f.label, kids: f.kids.map(function (k) { return Object.assign({}, k); }) }; });
+      .map(function (f) { return { fid: f.fid, label: f.label, pick: f.pick, kids: f.kids.map(function (k) { return Object.assign({}, k); }) }; });
   }
   function showFamilies(q) {
     if (!families.length) { if (q.qr) err = t('ci_none'); else notFound = { n: q.last4, enrolled: others.indexOf(q.last4) < 0 }; view = 'home'; render(); return; }
@@ -446,7 +446,8 @@
     });
   }
   function openCheckout(f) {
-    co = { fid: f.fid, family: f.label, partial: true, people: null,
+    // 可以接送的人先用名單裡遮罩過的名字（Tom L.）立刻顯示，後端回來再換成完整名字
+    co = { fid: f.fid, family: f.label, partial: true, people: f.pick ? f.pick.slice() : null,
            kids: f.kids.map(function (k) { return { cid: k.cid, name: k.name, cls: k.cls, checkedIn: !!k.checkedIn, checkedOut: false, outAt: '' }; }) };
     coPick = {}; coVerified = false;
     var localIn = co.kids.filter(function (k) { return k.checkedIn; });
@@ -454,7 +455,7 @@
     go('co');
     W.call('checkoutInfo', { key: key, fid: f.fid }).then(function (r) {
       if (view !== 'co' || !co || co.fid !== f.fid) return;
-      if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); co.people = []; var pp = document.getElementById('copeople'); if (pp) pp.innerHTML = '<p class="meta">' + esc(W.errText(r.error)) + '</p>'; return; }
+      if (!r.ok) { if (r.error === 'bad_key' || r.error === 'not_configured') return handleErr(r); if (!co.people) { co.people = []; var pp = document.getElementById('copeople'); if (pp) pp.innerHTML = '<p class="meta">' + esc(W.errText(r.error)) + '</p>'; } return; }
       co.partial = false; co.people = r.people; co.family = r.family || co.family;
       co.kids = r.kids;
       // 後端說已經簽退或今天沒簽到的孩子，取消勾選

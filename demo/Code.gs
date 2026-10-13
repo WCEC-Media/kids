@@ -1004,7 +1004,7 @@ function lookup_(req) {
 }
 
 // 簽到站解鎖後一次下載「今年有報 Awana 的家庭和孩子」，之後輸入末四碼或掃 QR 都在 iPad 上直接比對，不用等網路
-// 只有姓名、班別、末四碼、QR 代碼；過敏、生日、電話都不給
+// 只有孩子姓名、班別、末四碼、QR 代碼、遮罩過的家長和接送人名字（含關係）；過敏、生日、電話、地址都不給
 function roster_(req) {
   var err = checkStation_(req);
   if (err) return { ok: false, error: err };
@@ -1033,7 +1033,9 @@ function buildRoster_() {
     (byFam[k.fid] = byFam[k.fid] || []).push({ cid: k.cid, name: k.name, cls: k.cls, checkedIn: !!inToday[k.cid] });
   });
   var out = rows_(SHEET.FAMILIES).filter(function (f) { return byFam[f['家庭編號']]; }).map(function (f) {
-    return { fid: f['家庭編號'], last4: digits_(f['手機']).slice(-4) || ('0000' + String(f['手機末四碼'] || '')).slice(-4), qr: String(f['QR代碼'] || ''), label: maskName_(parentName_(f)), kids: byFam[f['家庭編號']] };
+    return { fid: f['家庭編號'], last4: digits_(f['手機']).slice(-4) || ('0000' + String(f['手機末四碼'] || '')).slice(-4), qr: String(f['QR代碼'] || ''), label: maskName_(parentName_(f)), kids: byFam[f['家庭編號']],
+             // 可以接送的人：名字遮罩（Tom L.）＋關係，簽退時不用等網路就能先核對；完整名字仍由 checkoutInfo 回傳
+             pick: peopleOf_(f).map(function (p) { return { name: maskName_(p.name), relation: p.relation }; }) };
   });
   // 有家庭資料但今年沒報 Awana 的末四碼（只有號碼），讓簽到站能說「今年還沒報名」而不是「找不到」
   var others = rows_(SHEET.FAMILIES).filter(function (f) { return !byFam[f['家庭編號']]; }).map(function (f) {
@@ -1043,6 +1045,14 @@ function buildRoster_() {
 }
 
 // ───────────────────────── 簽退（同工核對接送人身分後才完成）─────────────────────────
+// 可以接送的人：家長、第二家長、緊急聯絡人、其他接送人（只有姓名和關係，不回傳電話）
+function peopleOf_(fam) {
+  function person(first, last, rel) { return { name: fullName_(first, last), relation: rel || '' }; }
+  var people = [person(fam['家長 First Name'], fam['家長 Last Name'], fam['關係'])];
+  if (fam['第二家長 First Name']) people.push(person(fam['第二家長 First Name'], fam['第二家長 Last Name'], fam['第二家長關係']));
+  pickupsOf_(fam).forEach(function (p) { if (p.first) people.push(person(p.first, p.last, p.relation)); });
+  return people;
+}
 // 只給簽到站（要密碼）用：這個家庭今天簽到的孩子、可以接送的人（只有姓名和關係，不給電話）
 function checkoutInfo_(req) {
   var err = checkStation_(req);
@@ -1059,11 +1069,7 @@ function checkoutInfo_(req) {
     return { cid: k.cid, name: k.name, cls: k.cls, checkedIn: !!r, checkedOut: !!(r && r['簽退時間']),
              outAt: r && r['簽退時間'] instanceof Date ? Utilities.formatDate(r['簽退時間'], tz_(s), 'h:mm a') : '' };
   });
-  function person(first, last, rel) { return { name: fullName_(first, last), relation: rel || '' }; }
-  var people = [person(fam['家長 First Name'], fam['家長 Last Name'], fam['關係'])];
-  if (fam['第二家長 First Name']) people.push(person(fam['第二家長 First Name'], fam['第二家長 Last Name'], fam['第二家長關係']));
-  pickupsOf_(fam).forEach(function (p) { if (p.first) people.push(person(p.first, p.last, p.relation)); });   // 不回傳電話
-  return { ok: true, fid: req.fid, family: parentName_(fam), kids: kids, people: people };
+  return { ok: true, fid: req.fid, family: parentName_(fam), kids: kids, people: peopleOf_(fam) };
 }
 
 function checkout_(req) {
