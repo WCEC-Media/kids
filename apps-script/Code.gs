@@ -59,7 +59,6 @@ var DEFAULT_SETTINGS = [
   ['學年', '2026-27', '報名和簽到都看這個學年。新學年開始時改這裡（例如 2027-28），再把「開放報名」設成 TRUE'],
   ['開放報名', 'TRUE', 'FALSE = 報名表和家長專區都不能報名'],
   ['簽到站密碼', '', '前台 iPad 解鎖用，請改成只有同工知道的密碼（至少 6 碼）'],
-  ['顯示接送碼', 'TRUE', '簽到完成後是否顯示接送碼'],
   ['寄確認信', 'TRUE', '報名成功後寄確認信給家長'],
   ['網站網址', 'https://wcec-media.github.io/kids/', '報名表、家長專區所在的網址，Email 裡的按鈕會連到這裡'],
   ['登入保持天數', '365', '家長多久沒打開家長專區，就要重新用 Email 確認'],
@@ -987,7 +986,7 @@ function lookup_(req) {
   var today = todayStr_(s);
   var inToday = {};
   rows_(SHEET.LOG).forEach(function (r) {
-    if (dateStr_(r['日期'], s) === today) inToday[r['孩子編號']] = r['接送碼'];
+    if (dateStr_(r['日期'], s) === today) inToday[r['孩子編號']] = true;
   });
   var kids = activeKids_(s);
   var out = fams.map(function (f) {
@@ -1040,7 +1039,7 @@ function buildRoster_() {
   var others = rows_(SHEET.FAMILIES).filter(function (f) { return !byFam[f['家庭編號']]; }).map(function (f) {
     return digits_(f['手機']).slice(-4) || ('0000' + String(f['手機末四碼'] || '')).slice(-4);
   });
-  return { families: out, others: others, showCode: isTrue_(s['顯示接送碼']) };
+  return { families: out, others: others };
 }
 
 // ───────────────────────── 簽退（同工核對接送人身分後才完成）─────────────────────────
@@ -1105,12 +1104,7 @@ function checkin_(req) {
     var now = new Date();
     var log = rows_(SHEET.LOG).filter(function (r) { return dateStr_(r['日期'], s) === today; });
     var already = {};
-    var code = '';
-    log.forEach(function (r) {
-      already[r['孩子編號']] = true;
-      if (r['家庭編號'] === req.fid && r['接送碼']) code = r['接送碼'];   // 同一家庭同一天共用接送碼
-    });
-    if (!code) code = pickupCode_(log);
+    log.forEach(function (r) { already[r['孩子編號']] = true; });
 
     var kids = activeKids_(s).filter(function (k) { return k.fid === req.fid && cids.indexOf(k.cid) >= 0; });
     var sh = SpreadsheetApp.getActive().getSheetByName(SHEET.LOG);
@@ -1118,11 +1112,11 @@ function checkin_(req) {
     kids.forEach(function (k) {
       if (!already[k.cid]) {
         written_();
-        sh.appendRow([today, k.cid, k.name, k.cls, req.fid, now, req.via === 'qr' ? 'QR卡' : '末四碼', code, '', '']);
+        sh.appendRow([today, k.cid, k.name, k.cls, req.fid, now, req.via === 'qr' ? 'QR卡' : '末四碼', '', '', '']);   // 接送碼欄位保留但不再使用
       }
       done.push({ name: k.name, cls: k.cls });
     });
-    return { ok: true, kids: done, code: isTrue_(s['顯示接送碼']) ? code : null };
+    return { ok: true, kids: done };
   } finally {
     lock.releaseLock();
   }
@@ -1385,14 +1379,6 @@ function newFamilyId_(s) {
 function newKidId_() { return 'C' + rand_(8, '0123456789'); }
 function newQr_() { return 'WCECF-' + rand_(10, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'); }
 function baseUrl_() { return String(settings_()['網站網址'] || '').replace(/\/?$/, '/'); }
-
-function pickupCode_(todayLog) {
-  var used = todayLog.map(function (r) { return r['接送碼']; });
-  var code;
-  do { code = rand_(1, 'ABCDEFGHJKLMNPRSTUVWXYZ') + rand_(3, '23456789'); }
-  while (used.indexOf(code) >= 0);
-  return code;
-}
 
 function bump_(cache, key, max, seconds) {
   var n = Number(cache.get(key) || 0) + 1;

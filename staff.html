@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>兒童同工專區 | WCEC</title>
-<link rel="stylesheet" href="style.css?v=20261011b">
-<link rel="stylesheet" href="ios.css?v=20261011b">
+<link rel="stylesheet" href="style.css?v=20261013a">
+<link rel="stylesheet" href="ios.css?v=20261013a">
 <style>
   /* 同工專區：簽到、簽退、收款的入口（App 兒童事工頁右上角的圖示會打開這一頁） */
   .wrap { max-width: 560px; }
@@ -34,7 +34,7 @@
 
 <script src="config.js"></script>
 <script src="demo/gas-shim.js"></script>
-<script src="common.js?v=20261011b"></script>
+<script src="common.js?v=20261013a"></script>
 <script>
 (function () {
   var W = WCEC, t = W.t, esc = W.esc;
@@ -88,7 +88,7 @@
           if (r.ok) {
             key = v; W.store('wcec_station_key', v);
             // 解鎖時後端會一起回傳名單，先存起來，打開簽到、收款時就不用等
-            if (r.families && r.families.length) W.store('wcec_roster', JSON.stringify({ at: Date.now(), families: r.families, others: r.others || [], showCode: !!r.showCode }));
+            if (r.families && r.families.length) W.store('wcec_roster', JSON.stringify({ at: Date.now(), families: r.families, others: r.others || [] }));
           } else err = t('ci_' + r.error) || t('e_network');
           render();
         });

@@ -27,7 +27,6 @@
   .kidbtn[disabled] { opacity: .6; cursor: default; }
   .kidbtn .nm { font-size: 30px; font-weight: 800; line-height: 1.2; }
   .kidbtn .meta { color: var(--muted); font-size: 20px; }
-  .code { font-size: 96px; font-weight: 900; letter-spacing: .08em; color: var(--brand); line-height: 1.1; margin: 8px 0; font-family: ui-monospace, Menlo, monospace; }
   .staff { position: fixed; right: 14px; bottom: 12px; background: none; border: 0; color: var(--muted); font: inherit; font-size: 16px; padding: 10px; cursor: pointer; opacity: .7; }
   .langbtn { position: fixed; right: 14px; top: 12px; }
   #reader { max-width: 480px; margin: 12px auto; border-radius: 16px; overflow: hidden; }
@@ -58,8 +57,7 @@
     .pad { gap: 10px; } .pad button { min-height: 68px; font-size: 30px; }
     .actions .btn { min-width: 0; width: 100%; min-height: 60px; font-size: 20px; }
     .choice b { font-size: 23px; } .kidbtn .nm { font-size: 24px; } .kidbtn { min-height: 80px; padding: 14px 16px; }
-    .code { font-size: 64px; }
-  }
+    }
   .embed .staff { display: none; }   /* App 裡由同工專區負責鎖定 */
 
 /* 簽退 */

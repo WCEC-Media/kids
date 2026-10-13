@@ -12,15 +12,15 @@
   var idleTimer = null, countdown = 0, cdTimer = null, scanner = null;
   // 名單快取：解鎖後先下載今年的家庭和孩子，輸入末四碼時直接在這台裝置上找，不用等網路
   // 名單：存在這台簽到裝置上（只有孩子姓名、班別、末四碼），打開就能查；背景再跟後端更新
-  var roster = null, rosterAt = 0, showCode = false, others = [], notFound = null, rosterReq = null, reqId = 0;
+  var roster = null, rosterAt = 0, others = [], notFound = null, rosterReq = null, reqId = 0;
   function useRoster(r, at) {
-    roster = r.families || []; others = r.others || []; showCode = !!r.showCode; rosterAt = at || Date.now();
+    roster = r.families || []; others = r.others || []; rosterAt = at || Date.now();
   }
   function saveRoster(r) {
     // 保險：已經有名單時，後端回傳空名單就不要覆蓋（避免名單突然變成 0 個家庭）
     if (roster && roster.length && !(r.families && r.families.length)) return;
     useRoster(r);
-    W.store('wcec_roster', JSON.stringify({ at: rosterAt, families: roster, others: others, showCode: showCode }));
+    W.store('wcec_roster', JSON.stringify({ at: rosterAt, families: roster, others: others }));
     // 只更新最下面那一行「名單已準備好」，不整頁重畫：
     // 整頁重畫會換掉輸入框，同工剛點開的鍵盤就會自己收起來（一進簽到頁時最容易遇到）
     if (view === 'home') {
@@ -246,8 +246,6 @@
     done: function () {
       return '<section class="card center"><div style="font-size:64px" aria-hidden="true">✅</div><h2>' + t(done.out ? 'co_done' : 'ci_done') + '</h2>' +
         '<ul class="kids-done">' + done.kids.map(function (k) { return '<li><b>' + esc(k.name) + '</b>' + (k.cls ? ' · ' + esc(k.cls) : '') + '</li>'; }).join('') + '</ul>' +
-        (done.code ? '<p style="margin:18px 0 0">' + t('ci_code') + '</p><div class="code">' + esc(done.code) + '</div><p class="hint">' + t('ci_code_hint') + '</p>'
-          : done.pending && showCode ? '<p style="margin:18px 0 0">' + t('ci_code') + '</p><div class="code"><span class="spinner"></span></div>' : '') +
         '<div class="actions"><button class="btn" id="fin">' + t('ci_finish') + '</button></div><p class="hint">' + t('ci_auto', { s: countdown }) + '</p></section>';
     },
   };
@@ -483,8 +481,8 @@
     var cids = Object.keys(picked).filter(function (k) { return picked[k]; });
     // 先顯示「簽到完成」，同時在背景寫進試算表；萬一失敗再回到選孩子的畫面請同工重按
     var f = fam, chosen = f.kids.filter(function (k) { return picked[k.cid]; });
-    done = { kids: chosen.map(function (k) { return { name: k.name, cls: k.cls }; }), code: null, pending: true };
-    countdown = 20; go('done');
+    done = { kids: chosen.map(function (k) { return { name: k.name, cls: k.cls }; }) };
+    countdown = 10; go('done');
     clearInterval(cdTimer);
     cdTimer = setInterval(function () { countdown--; if (countdown <= 0) finish(); else if (view === 'done') render(); }, 1000);
     W.call('checkin', { key: key, fid: f.fid, cids: cids, via: via }).then(function (r) {
@@ -495,7 +493,6 @@
       }
       // 名單快取裡標成已簽到
       (roster || []).forEach(function (rf) { if (rf.fid === f.fid) rf.kids.forEach(function (k) { if (cids.indexOf(k.cid) >= 0) k.checkedIn = true; }); });
-      if (done && done.pending) { done.pending = false; done.code = r.code; if (view === 'done') render(); }
     });
   }
   function finish() { clearInterval(cdTimer); reset(); }
