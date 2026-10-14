@@ -15,6 +15,13 @@
   var roster = null, rosterAt = 0, others = [], notFound = null, rosterReq = null, reqId = 0;
   function useRoster(r, at) {
     roster = r.families || []; others = r.others || []; rosterAt = at || Date.now();
+    newDay();
+  }
+  // 名單是昨天（或更早）下載的：裡面的「已簽到」是那天的，換日後全部當作還沒簽到（不用連網路）
+  function newDay() {
+    if (!roster || new Date(rosterAt).toDateString() === new Date().toDateString()) return;
+    roster.forEach(function (f) { f.kids.forEach(function (k) { k.checkedIn = false; }); });
+    rosterAt = Date.now();
   }
   function saveRoster(r) {
     // 保險：已經有名單時，後端回傳空名單就不要覆蓋（避免名單突然變成 0 個家庭）
@@ -344,6 +351,7 @@
   }
 
   function localFind(q) {
+    newDay();   // 頁面開著過夜也會換日
     return roster.filter(function (f) { return q.qr ? f.qr && f.qr === String(q.qr).trim() : f.last4 === q.last4; })
       .map(function (f) { return { fid: f.fid, label: f.label, pick: f.pick, kids: f.kids.map(function (k) { return Object.assign({}, k); }) }; });
   }
