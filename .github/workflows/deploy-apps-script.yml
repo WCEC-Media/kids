@@ -1,0 +1,134 @@
+# 把 apps-script/Code.gs 自動更新到兒童事工試算表的 Apps Script，並發布到原本的部署作業（網址不變）
+#
+# 什麼時候跑：
+#   - main 上的 apps-script/Code.gs 有改動時（合併進 main 才會上線）
+#   - Actions 分頁 → 「更新 Apps Script 後端」→ Run workflow（手動）
+#
+# 需要的 Secret：CLASPRC_JSON = 執行 `npx @google/clasp login` 之後 ~/.clasprc.json 的內容
+#
+# 安全檢查：如果試算表上的 Code.gs 有人直接在 Apps Script 編輯器改過（跟 GitHub 上一版不同），
+# 會停下來不覆蓋，避免把手動修改蓋掉。確認可以覆蓋後，手動執行時勾選「force」。
+name: 更新 Apps Script 後端
+
+on:
+  push:
+    branches: [main]
+    paths: [apps-script/Code.gs]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 試算表上的 Code.gs 跟 GitHub 不同時，仍然覆蓋
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-apps-script
+  cancel-in-progress: false
+
+env:
+  SCRIPT_ID: 1LuVWNx7e135F9pqt2vQuy5gQ-_mPP01gXfjUYlyUDTjp3KnpoZs-1YkE
+  DEPLOYMENT_ID: AKfycbyhqF2Pu6F_sJ2X0Mf9LIDCGUBFTWNdhOXGL_fp5FAEU1pnWneoNV6SET8sCv1p3LvsRg
+  CLASP: npx --yes @google/clasp@3.4.1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 登入 clasp
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::還沒設定 Secret CLASPRC_JSON（Settings → Secrets and variables → Actions）"
+            exit 1
+          fi
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          chmod 600 ~/.clasprc.json
+          $CLASP show-authorized-user
+
+      # 先把線上的專案抓下來：保留線上的 appsscript.json（時區、權限、網頁應用程式設定）和其他檔案，只換掉 Code.gs
+      - name: 下載線上的 Apps Script 專案
+        run: |
+          mkdir build
+          printf '{"scriptId":"%s","rootDir":".","scriptExtensions":[".gs",".js"]}' "$SCRIPT_ID" > build/.clasp.json
+          cd build && $CLASP pull
+          ls -la
+
+      - name: 比對線上版本
+        id: check
+        env:
+          BEFORE: ${{ github.event.before }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          remote=build/Code.gs
+          [ -f "$remote" ] || remote=build/Code.js
+          if [ ! -f "$remote" ]; then
+            echo "::error::線上的專案裡找不到 Code.gs"; ls build; exit 1
+          fi
+          echo "remote=$remote" >> "$GITHUB_OUTPUT"
+          same() { diff -q -B -Z --strip-trailing-cr "$1" "$2" >/dev/null; }
+
+          if same "$remote" apps-script/Code.gs; then
+            echo "線上的 Code.gs 已經是最新版，不用更新。"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # 線上版本應該等於 GitHub 的上一版；不同就代表有人直接在編輯器改過
+          prev=$(mktemp)
+          if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+             && git show "$BEFORE:apps-script/Code.gs" > "$prev" 2>/dev/null && same "$remote" "$prev"; then
+            echo "線上版本 = GitHub 上一版，可以更新。"
+          elif [ "$FORCE" = "true" ]; then
+            echo "::warning::線上的 Code.gs 跟 GitHub 不同，因為勾選了 force，仍然覆蓋。"
+          else
+            echo "::error::試算表上的 Code.gs 跟 GitHub 上一版不同（可能有人直接在 Apps Script 編輯器改過）。為了不蓋掉那些修改，這次沒有更新。請先把線上的修改合併回 GitHub；確定可以覆蓋的話，到 Actions 手動執行並勾選 force。"
+            diff -u --strip-trailing-cr "$remote" apps-script/Code.gs | head -200 || true
+            exit 1
+          fi
+          echo "與線上版本的差異："
+          diff -u --strip-trailing-cr "$remote" apps-script/Code.gs | head -200 || true
+
+      # 線上的 appsscript.json 沒有網頁應用程式設定時，補上跟 README 一樣的設定（執行身分「我」、存取權「所有人」），
+      # 避免更新部署作業時存取權被改掉，家長和簽到站就連不到
+      - name: 確認網頁應用程式設定
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          node -e '
+            const fs = require("fs"), f = "build/appsscript.json";
+            const m = JSON.parse(fs.readFileSync(f, "utf8"));
+            if (!m.webapp) {
+              m.webapp = { executeAs: "USER_DEPLOYING", access: "ANYONE_ANONYMOUS" };
+              fs.writeFileSync(f, JSON.stringify(m, null, 2));
+              console.log("補上 webapp 設定");
+            }
+            console.log(JSON.stringify(m.webapp));
+          '
+
+      - name: 上傳並發布到原本的部署作業
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          cp apps-script/Code.gs "${{ steps.check.outputs.remote }}"
+          cd build
+          $CLASP push --force
+          $CLASP redeploy "$DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA::7}"
+
+      - name: 確認後端可以連線
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          sleep 5
+          body=$(curl -fsSL "https://script.google.com/macros/s/$DEPLOYMENT_ID/exec")
+          echo "$body" | head -c 300; echo
+          echo "$body" | grep -q '"ok":true' || { echo "::error::後端沒有正常回應，請到 Apps Script 檢查"; exit 1; }
+
+      - name: 清除登入資料
+        if: always()
+        run: rm -f ~/.clasprc.json
