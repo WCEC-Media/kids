@@ -152,9 +152,10 @@
     },
     formatDate: function (d, tz, fmt) {
       d = d instanceof Date ? d : new Date(d);
-      return fmt.replace(/yyyy|yy|MM|M|dd|d|HH|mm/g, function (t) {
+      return fmt.replace(/yyyy|yy|MM|M|dd|d|HH|h|mm|a/g, function (t) {
         return { yyyy: d.getFullYear(), yy: String(d.getFullYear()).slice(2), MM: pad(d.getMonth() + 1), M: d.getMonth() + 1,
-                 dd: pad(d.getDate()), d: d.getDate(), HH: pad(d.getHours()), mm: pad(d.getMinutes()) }[t];
+                 dd: pad(d.getDate()), d: d.getDate(), HH: pad(d.getHours()), h: d.getHours() % 12 || 12, mm: pad(d.getMinutes()),
+                 a: d.getHours() < 12 ? 'AM' : 'PM' }[t];
       });
     },
   };

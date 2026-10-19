@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css?v=20261014a">
 <link rel="stylesheet" href="ios.css?v=20261014a">
 <style>
-  /* 同工專區：簽到、簽退、收款的入口（App 兒童事工頁右上角的圖示會打開這一頁） */
+  /* 同工專區：簽到、簽退、班級名單、收款的入口（App 兒童事工頁右上角的圖示會打開這一頁） */
   .wrap { max-width: 560px; }
   .lead { margin: 0 4px 16px; }
   .tile { display: flex; align-items: center; gap: 16px; width: 100%; text-align: left; background: var(--card); color: var(--ink);
@@ -45,20 +45,23 @@
   var IC = {
     checkin: icon('<circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7 1.4 0 2.7.4 3.8 1.1"/><path d="M15 19l2 2 5-5"/>'),
     checkout: icon('<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/>'),
+    list: icon('<path d="M9 6h12M9 12h12M9 18h12"/><path d="M3 6l1.5 1.5L7 5"/><path d="M3 12l1.5 1.5L7 11"/><circle cx="4.5" cy="18" r="1.5"/>'),
     pay: icon('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/>'),
     lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
   };
   var en = W.lang() === 'en';
   var S = en ? {
-    lead: 'For children\'s ministry staff only.', lockH: 'Staff area', lockP: 'For children\'s ministry staff only (check-in, check-out, payments). Enter the staff password:',
+    lead: 'For children\'s ministry staff only.', lockH: 'Staff area', lockP: 'For children\'s ministry staff only (check-in, check-out, class roster, payments). Enter the staff password:',
     lockNote: 'Parents don\'t need this page — your family check-in pass is in the Parent Area.', enter: 'Enter',
     ci: 'Check-in', ciD: 'Last 4 digits of a parent\'s phone, or scan the family card', co: 'Check-out', coD: 'Confirm who is picking up, then let the child go',
+    cl: 'Class roster', clD: 'Who in your class is checked in today, and who isn\'t yet',
     soon: 'Coming soon', pay: 'Payments', payD: 'Record Awana donations and uniforms (check / cash)',
     lock: 'Lock staff area', lockedNote: 'This phone is unlocked. Lock it before lending it to someone else.',
   } : {
-    lead: '只給兒童事工同工使用。', lockH: '兒童同工專區', lockP: '這裡只給兒童事工同工使用（簽到、簽退、收款）。請輸入同工密碼：',
+    lead: '只給兒童事工同工使用。', lockH: '兒童同工專區', lockP: '這裡只給兒童事工同工使用（簽到、簽退、班級名單、收款）。請輸入同工密碼：',
     lockNote: '家長不需要進來這裡；家庭簽到卡在「家長專區」。', enter: '進入',
     ci: '簽到', ciD: '輸入家長手機末四碼，或掃描家庭簽到卡', co: '簽退', coD: '確認接送人後讓孩子離開',
+    cl: '班級名單', clD: '看自己班上今天誰已經簽到、誰還沒到',
     soon: '即將推出', pay: '收款', payD: '記錄 Awana 奉獻與制服（支票／現金）',
     lock: '鎖定兒童同工專區', lockedNote: '這支手機目前已解鎖。借給別人用之前，請先鎖定。',
   };
@@ -101,6 +104,7 @@
     h += '<p class="lead">' + esc(S.lead) + '</p>' +
       '<a class="tile" href="' + W.link('checkin.html') + '"><span class="ic" style="background:#2f7f86">' + IC.checkin + '</span><span><b>' + esc(S.ci) + '</b><span class="d">' + esc(S.ciD) + '</span></span>' + CHEV + '</a>' +
       '<a class="tile" href="' + W.link('checkout.html') + '"><span class="ic" style="background:#8b6f47">' + IC.checkout + '</span><span><b>' + esc(S.co) + '</b><span class="d">' + esc(S.coD) + '</span></span>' + CHEV + '</a>' +
+      '<a class="tile" href="' + W.link('classes.html') + '"><span class="ic" style="background:#4a5d8f">' + IC.list + '</span><span><b>' + esc(S.cl) + '</b><span class="d">' + esc(S.clD) + '</span></span>' + CHEV + '</a>' +
       '<a class="tile" href="' + W.link('pay.html') + '"><span class="ic" style="background:#b07a1f">' + IC.pay + '</span><span><b>' + esc(S.pay) + '</b><span class="d">' + esc(S.payD) + '</span></span>' + CHEV + '</a>' +
       '<button class="lockbtn" id="lock" type="button">' + IC.lock + esc(S.lock) + '</button><p class="note">' + esc(S.lockedNote) + '</p>';
     app.innerHTML = h;
