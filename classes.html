@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>班級名單 | WCEC</title>
+<link rel="stylesheet" href="style.css?v=20261019a">
+<link rel="stylesheet" href="ios.css?v=20261019a">
+<style>
+  /* 班級名單：老師選自己的班，看今天誰已經簽到、誰還沒到（從兒童同工專區進來） */
+  .wrap { max-width: 640px; }
+  .embed header.top { display: none; }
+  .chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 10px; margin: 0 -2px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: 0 0 auto; border: 0; background: var(--fill); color: var(--ink); border-radius: 999px; padding: 8px 16px;
+    font: inherit; font-size: 17px; font-weight: 600; min-height: 44px; white-space: nowrap; }
+  .chip.on { background: var(--brand); color: var(--brand-ink); }
+  .sum { background: var(--card); border-radius: 12px; padding: 16px; margin: 4px 0 18px; }
+  .sum .big { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .sum .big b { font-size: 44px; line-height: 1; letter-spacing: -0.03em; }
+  .sum .big span { color: var(--muted); font-size: 19px; }
+  .bar { height: 8px; background: var(--fill); border-radius: 99px; overflow: hidden; margin: 12px 0 10px; }
+  .bar i { display: block; height: 100%; background: var(--ok); border-radius: 99px; }
+  .sum .meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 16px; }
+  .refresh { border: 0; background: none; color: var(--brand); font: inherit; font-size: 16px; font-weight: 600; min-height: 44px; padding: 0 4px; }
+  h2.sec { font-size: 15px; font-weight: 600; color: var(--muted); text-transform: uppercase; margin: 18px 16px 6px; letter-spacing: 0; }
+  .list { background: var(--card); border-radius: 12px; overflow: hidden; }
+  .item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; min-height: 60px; background: none; border: 0;
+    border-top: 0.5px solid var(--line); color: var(--ink); font: inherit; text-align: left; }
+  .item:first-child { border-top: 0; }
+  .item[role=button] { cursor: pointer; }
+  .item[role=button]:active { background: var(--fill); }
+  .item .dot { flex: 0 0 28px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 16px; font-weight: 700; }
+  .item.no .dot { border: 2px solid var(--line); }
+  .item.in .dot { background: var(--ok); color: #fff; }
+  .item.out .dot { background: var(--fill); color: var(--muted); }
+  .item .nm { font-weight: 600; }
+  .item .mt { color: var(--muted); font-size: 15px; }
+  .item.out .nm { color: var(--muted); }
+  .item .txt { flex: 1 1 auto; min-width: 0; }
+  .warn { flex: 0 0 auto; border: 0; background: var(--gold-soft); color: #8a5a00; border-radius: 999px; padding: 6px 12px;
+    font: inherit; font-size: 15px; font-weight: 600; min-height: 36px; }
+  :root[data-theme="dark"] .warn { color: var(--gold); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .warn { color: var(--gold); } }
+  .empty { padding: 16px; color: var(--muted); font-size: 17px; }
+  .note-box { background: var(--gold-soft); border-radius: 10px; padding: 10px 12px; margin-top: 10px; white-space: pre-wrap; }
+  .loading { text-align: center; color: var(--muted); padding: 40px 0; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app" aria-live="polite"></div>
+<script src="config.js"></script>
+<script src="demo/gas-shim.js"></script>
+<script src="common.js?v=20261019a"></script>
+<script>
+(function () {
+  var W = WCEC, esc = W.esc;
+  var app = document.getElementById('app');
+  var key = W.store('wcec_station_key') || '';
+  var data = null, err = '', busy = false, ALL = '*';
+  var pick = W.store('wcec_class_pick') || '';
+  var en = W.lang() === 'en';
+  var S = en ? {
+    title: 'Class roster', locked: 'Unlock the Kids Staff area first.', toStaff: 'Go to Kids Staff', all: 'All',
+    here: 'here', of: 'of {n}', outN: '{n} checked out', at: 'Updated {t}', refresh: '↻ Refresh', loading: 'Loading…',
+    notIn: 'Not checked in ({n})', inH: 'Checked in ({n})', none: 'No one', noKids: 'No children registered in this class.',
+    warn: '⚠ Allergy', noteH: 'Allergies / special needs', inAt: 'Checked in {t}', outAt: 'Checked out {t}',
+    via: { 'QR卡': 'QR card', '末四碼': 'phone digits' },
+    undo: 'Cancel check-in (not here today)', undoQ: 'Cancel today\'s check-in for {n}?',
+    undoP: 'Only do this if the child is not actually here. The record stays in the spreadsheet, and the child can check in again later.',
+    undoGo: 'Yes, cancel check-in', undone: 'Check-in cancelled', checked_out: 'Already checked out — can\'t cancel.',
+  } : {
+    title: '班級名單', locked: '請先在「兒童同工專區」解鎖。', toStaff: '前往兒童同工專區', all: '全部',
+    here: '已到', of: '／共 {n} 位', outN: '已簽退 {n} 位', at: '更新於 {t}', refresh: '↻ 重新整理', loading: '讀取中…',
+    notIn: '還沒簽到（{n}）', inH: '已簽到（{n}）', none: '沒有', noKids: '這個班今年還沒有孩子報名。',
+    warn: '⚠ 過敏', noteH: '過敏／特殊需求', inAt: '簽到 {t}', outAt: '已簽退 {t}',
+    via: {},
+    undo: '取消簽到（孩子今天沒來）', undoQ: '確定要取消 {n} 今天的簽到嗎？',
+    undoP: '只有孩子今天其實沒來時才需要取消。試算表仍會留下紀錄；孩子之後真的來了，可以再簽到。',
+    undoGo: '確定取消', undone: '已取消簽到', checked_out: '這個孩子已經簽退，不能取消簽到。',
+  };
+  function fill(s, v) { Object.keys(v).forEach(function (k) { s = s.split('{' + k + '}').join(v[k]); }); return s; }
+
+  function setTitle() {
+    document.title = S.title + ' | WCEC';
+    try { if (window.WCECApp && window.WCECApp.postMessage) window.WCECApp.postMessage(JSON.stringify({ type: 'title', title: S.title })); } catch (e) {}
+  }
+
+  function load() {
+    if (!key || busy) return;
+    busy = true;
+    W.call('classList', { key: key }).then(function (r) {
+      busy = false;
+      if (r.ok) { data = r; err = ''; }
+      else if (r.error === 'bad_key' || r.error === 'not_configured') { key = ''; W.forget('wcec_station_key'); }
+      else err = W.errText(r.error);
+      render();
+    });
+  }
+
+  function kidsOf(cls) {
+    return data.kids.filter(function (k) { return cls === ALL || k.cls === cls; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name); });
+  }
+
+  function row(k, showCls) {
+    var state = k.checkedOut ? 'out' : k.checkedIn ? 'in' : 'no';
+    var meta = [];
+    if (showCls && k.cls) meta.push(k.cls);
+    if (k.grade) meta.push(W.gradeLabel(k.grade));
+    if (k.checkedOut) meta.push(fill(S.outAt, { t: k.outAt }));
+    else if (k.checkedIn) meta.push(fill(S.inAt, { t: k.inAt }) + (k.via ? ' · ' + (S.via[k.via] || k.via) : ''));
+    // 已簽到的那一列可以點（取消簽到）；用 div＋role，因為裡面還有「過敏」按鈕
+    return '<div class="item ' + state + '" data-c="' + esc(k.cid) + '"' + (state === 'in' ? ' role="button" tabindex="0"' : '') + '>' +
+      '<span class="dot" aria-hidden="true">' + (state === 'in' ? '✓' : state === 'out' ? '↗' : '') + '</span>' +
+      '<span class="txt"><span class="nm">' + esc(k.name) + '</span><br><span class="mt">' + esc(meta.join(' · ')) + '</span></span>' +
+      (k.note ? '<button type="button" class="warn" data-n="' + esc(k.cid) + '">' + esc(S.warn) + '</button>' : '') +
+      '</div>';
+  }
+
+  function render() {
+    setTitle();
+    var h = '<header class="top"><div><h1>' + esc(S.title) + '</h1></div></header>' + W.demoBar();
+    if (!key) {
+      app.innerHTML = h + '<section class="card"><p>' + esc(S.locked) + '</p><a class="btn block" href="' + W.link('staff.html') + '">' + esc(S.toStaff) + '</a></section>';
+      return;
+    }
+    if (err) h += '<div class="banner err" role="alert">' + esc(err) + '</div>';
+    if (!data) { app.innerHTML = h + '<p class="loading">' + esc(S.loading) + '</p>'; return; }
+
+    var classes = data.classes || [];
+    if (pick !== ALL && classes.indexOf(pick) < 0) pick = classes[0] || ALL;
+    h += '<div class="chips" role="tablist">' + classes.concat([ALL]).map(function (c) {
+      return '<button type="button" role="tab" class="chip' + (c === pick ? ' on' : '') + '" aria-selected="' + (c === pick) + '" data-cls="' + esc(c) + '">' + esc(c === ALL ? S.all : c) + '</button>';
+    }).join('') + '</div>';
+
+    var kids = kidsOf(pick), showCls = pick === ALL;
+    var notIn = kids.filter(function (k) { return !k.checkedIn; }), inK = kids.filter(function (k) { return k.checkedIn; });
+    var outN = inK.filter(function (k) { return k.checkedOut; }).length;
+    var pct = kids.length ? Math.round(inK.length / kids.length * 100) : 0;
+    h += '<section class="sum"><div class="big"><b>' + inK.length + '</b><span>' + esc(S.here) + esc(fill(S.of, { n: kids.length })) + '</span></div>' +
+      '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="meta"><span>' + (outN ? esc(fill(S.outN, { n: outN })) + ' · ' : '') + esc(fill(S.at, { t: data.at })) + '</span>' +
+      '<button type="button" class="refresh" id="refresh">' + esc(busy ? S.loading : S.refresh) + '</button></div></section>';
+
+    if (!kids.length) h += '<div class="list"><div class="empty">' + esc(S.noKids) + '</div></div>';
+    else {
+      h += '<h2 class="sec">' + esc(fill(S.notIn, { n: notIn.length })) + '</h2><div class="list">' +
+        (notIn.length ? notIn.map(function (k) { return row(k, showCls); }).join('') : '<div class="empty">' + esc(S.none) + '</div>') + '</div>';
+      h += '<h2 class="sec">' + esc(fill(S.inH, { n: inK.length })) + '</h2><div class="list">' +
+        (inK.length ? inK.map(function (k) { return row(k, showCls); }).join('') : '<div class="empty">' + esc(S.none) + '</div>') + '</div>';
+    }
+    app.innerHTML = h;
+
+    app.querySelectorAll('.chip').forEach(function (b) {
+      b.onclick = function () { pick = b.getAttribute('data-cls'); W.store('wcec_class_pick', pick); render(); };
+    });
+    document.getElementById('refresh').onclick = load;
+    app.querySelectorAll('.warn').forEach(function (b) {
+      b.onclick = function (e) { e.stopPropagation(); showNote(find(b.getAttribute('data-n'))); };
+    });
+    app.querySelectorAll('.item[role=button]').forEach(function (b) {
+      b.onclick = function () { kidMenu(find(b.getAttribute('data-c'))); };
+      b.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); b.onclick(); } };
+    });
+  }
+
+  function find(cid) { return data.kids.filter(function (k) { return k.cid === cid; })[0]; }
+  function showNote(k) {
+    if (!k) return;
+    W.dialog({ title: k.name, body: '<p class="hint">' + esc(S.noteH) + '</p><div class="note-box">' + esc(k.note) + '</div>' });
+  }
+  // 已簽到的孩子：可以取消簽到（孩子今天其實沒來）
+  function kidMenu(k) {
+    if (!k || !k.checkedIn || k.checkedOut) return;
+    var body = '<p>' + esc(fill(S.inAt, { t: k.inAt })) + (k.via ? ' · ' + esc(S.via[k.via] || k.via) : '') + '</p>' +
+      (k.note ? '<p class="hint">' + esc(S.noteH) + '</p><div class="note-box">' + esc(k.note) + '</div>' : '');
+    W.dialog({ title: k.name, body: body, actions: [
+      { label: S.undo, onClick: function () { confirmUndo(k); } },
+      { label: W.t('close'), kind: 'ghost' },
+    ] });
+  }
+  function confirmUndo(k) {
+    W.dialog({ title: fill(S.undoQ, { n: k.name }), body: '<p>' + esc(S.undoP) + '</p>', actions: [
+      { label: S.undoGo, onClick: function (close, back) {
+        var btns = back.querySelectorAll('button');
+        btns.forEach(function (b) { b.disabled = true; });
+        W.call('uncheckin', { key: key, cid: k.cid }).then(function (r) {
+          close();
+          if (r.ok) { k.checkedIn = false; k.inAt = ''; k.via = ''; W.toast(S.undone); render(); load(); }
+          else { err = r.error === 'checked_out' ? S.checked_out : W.errText(r.error); render(); load(); }
+        });
+        return true;   // 等後端回應再關閉
+      } },
+      { label: W.t('back'), kind: 'ghost' },
+    ] });
+  }
+
+  render();
+  load();
+  // 開著的時候每 45 秒更新一次（其他同工剛簽到的孩子）；切回這個畫面時也更新
+  setInterval(function () { if (!document.hidden && !document.querySelector('.dlg-back')) load(); }, 45000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
+  addEventListener('pageshow', function (e) { if (e.persisted) { key = W.store('wcec_station_key') || ''; load(); } });
+})();
+</script>
+</body>
+</html>

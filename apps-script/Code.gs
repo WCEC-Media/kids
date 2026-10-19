@@ -47,7 +47,7 @@ var HEADERS = {
   '報名': ['學年', '項目', '孩子編號', '家庭編號', '孩子姓名', '年級', '班別', '報名時間', '狀態', '備註'],
   '同意書': ['學年', '家庭編號', '簽名人', '簽名', '簽名時間', '來源'],
   '簽到紀錄': ['日期', '孩子編號', '孩子姓名', '班別', '家庭編號', '簽到時間',
-             '簽到方式', '接送碼', '簽退時間', '簽退同工'],
+             '簽到方式', '接送碼', '簽退時間', '簽退同工', '取消簽到'],
   '登入裝置': ['建立時間', '家庭編號', 'Email', '權杖雜湊', '最後使用', '裝置', '狀態'],
   // 同工在 App 簽到站「收款」記錄（也可以直接在試算表填）
   '收款紀錄': ['學年', '家庭編號', '家庭', '項目', '孩子', '金額', '方式', '支票號碼', '收款同工', '記錄時間', '備註'],
@@ -256,6 +256,8 @@ function handle_(req) {
       case 'checkin':      return checkin_(req);
       case 'checkoutInfo': return checkoutInfo_(req);
       case 'checkout':     return checkout_(req);
+      case 'classList':    return classList_(req);
+      case 'uncheckin':    return uncheckin_(req);
       default:             return { ok: false, error: 'unknown_action' };
     }
   } catch (err) {
@@ -983,11 +985,8 @@ function lookup_(req) {
     if (last4.length !== 4) return { ok: false, error: 'invalid' };
     fams = fams.filter(function (f) { return String(f['手機末四碼']) === last4; });
   }
-  var today = todayStr_(s);
   var inToday = {};
-  rows_(SHEET.LOG).forEach(function (r) {
-    if (dateStr_(r['日期'], s) === today) inToday[r['孩子編號']] = true;
-  });
+  todayLog_(s).forEach(function (r) { inToday[r['孩子編號']] = true; });
   var kids = activeKids_(s);
   var out = fams.map(function (f) {
     return {
@@ -1025,9 +1024,8 @@ function rosterData_(rebuild) {
 
 function buildRoster_() {
   var s = settings_();
-  var today = todayStr_(s);
   var inToday = {};
-  rows_(SHEET.LOG).forEach(function (r) { if (dateStr_(r['日期'], s) === today) inToday[r['孩子編號']] = true; });
+  todayLog_(s).forEach(function (r) { inToday[r['孩子編號']] = true; });
   var byFam = {};
   activeKids_(s).forEach(function (k) {
     (byFam[k.fid] = byFam[k.fid] || []).push({ cid: k.cid, name: k.name, cls: k.cls, checkedIn: !!inToday[k.cid] });
@@ -1057,13 +1055,11 @@ function peopleOf_(fam) {
 function checkoutInfo_(req) {
   var err = checkStation_(req);
   if (err) return { ok: false, error: err };
-  var s = settings_(), today = todayStr_(s);
+  var s = settings_();
   var fam = rows_(SHEET.FAMILIES).filter(function (f) { return f['家庭編號'] === req.fid; })[0];
   if (!fam) return { ok: false, error: 'not_found' };
   var log = {};
-  rows_(SHEET.LOG).forEach(function (r) {
-    if (r['家庭編號'] === req.fid && dateStr_(r['日期'], s) === today) log[r['孩子編號']] = r;
-  });
+  todayLog_(s).forEach(function (r) { if (r['家庭編號'] === req.fid) log[r['孩子編號']] = r; });
   var kids = activeKids_(s).filter(function (k) { return k.fid === req.fid; }).map(function (k) {
     var r = log[k.cid];
     return { cid: k.cid, name: k.name, cls: k.cls, checkedIn: !!r, checkedOut: !!(r && r['簽退時間']),
@@ -1077,14 +1073,14 @@ function checkout_(req) {
   if (err) return { ok: false, error: err };
   var cids = req.cids || [], staff = clean_(req.staff);
   if (!req.fid || !cids.length || req.verified !== true) return { ok: false, error: 'invalid' };   // 一定要同工確認已核對接送人（同工名字不用填）
-  var s = settings_(), today = todayStr_(s), now = new Date();
+  var s = settings_(), now = new Date();
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   dirty_();
   try {
     var done = [];
-    rows_(SHEET.LOG).forEach(function (r) {
-      if (r['家庭編號'] !== req.fid || dateStr_(r['日期'], s) !== today || cids.indexOf(r['孩子編號']) < 0) return;
+    todayLog_(s).forEach(function (r) {
+      if (r['家庭編號'] !== req.fid || cids.indexOf(r['孩子編號']) < 0) return;
       if (!r['簽退時間']) {
         setCell_(SHEET.LOG, r._row, '簽退時間', now);
         setCell_(SHEET.LOG, r._row, '簽退同工', staff);
@@ -1108,9 +1104,8 @@ function checkin_(req) {
   try {
     var today = todayStr_(s);
     var now = new Date();
-    var log = rows_(SHEET.LOG).filter(function (r) { return dateStr_(r['日期'], s) === today; });
     var already = {};
-    log.forEach(function (r) { already[r['孩子編號']] = true; });
+    todayLog_(s).forEach(function (r) { already[r['孩子編號']] = true; });
 
     var kids = activeKids_(s).filter(function (k) { return k.fid === req.fid && cids.indexOf(k.cid) >= 0; });
     var sh = SpreadsheetApp.getActive().getSheetByName(SHEET.LOG);
@@ -1126,6 +1121,49 @@ function checkin_(req) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ───────────────────────── 班級名單（同工專區，需要簽到站密碼）─────────────────────────
+// 今年報 Awana 的孩子，加上今天的簽到／簽退時間，讓老師核對自己班上誰到了、誰還沒到
+// 過敏／特殊需求只在這裡給同工看；簽到站的名單（roster）仍然不含過敏資料
+function classList_(req) {
+  var err = checkStation_(req);
+  if (err) return { ok: false, error: err };
+  var s = settings_(), tz = tz_(s);
+  function hm(v) { return v instanceof Date ? Utilities.formatDate(v, tz, 'h:mm a') : ''; }
+  var log = {};
+  todayLog_(s).forEach(function (r) { log[r['孩子編號']] = r; });
+  var notes = {};
+  rows_(SHEET.KIDS).forEach(function (k) { notes[k['孩子編號']] = clean_(k['過敏/特殊需求']); });
+  var kids = activeKids_(s).map(function (k) {
+    var r = log[k.cid];
+    return { cid: k.cid, name: k.name, cls: k.cls, grade: k.grade, note: notes[k.cid] || '',
+             checkedIn: !!r, inAt: r ? hm(r['簽到時間']) : '', via: r ? String(r['簽到方式'] || '') : '',
+             checkedOut: !!(r && r['簽退時間']), outAt: r ? hm(r['簽退時間']) : '' };
+  });
+  // 班別照「班別」工作表的順序（Puggles → T&T）；工作表裡沒有的班別排在最後
+  var classes = [];
+  grades_().concat(kids).forEach(function (g) { if (g.cls && classes.indexOf(g.cls) < 0) classes.push(g.cls); });
+  return { ok: true, date: todayStr_(s), at: hm(new Date()), classes: classes, kids: kids };
+}
+
+// 取消簽到（孩子沒來卻被簽到了）：不刪掉那一列，在「取消簽到」欄寫下時間，試算表裡還查得到
+// 取消後這個孩子就當作今天還沒簽到，之後真的來了可以再簽到
+function uncheckin_(req) {
+  var err = checkStation_(req);
+  if (err) return { ok: false, error: err };
+  if (!req.cid) return { ok: false, error: 'invalid' };
+  var s = settings_(), now = new Date();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  dirty_();
+  try {
+    var rows = todayLog_(s).filter(function (r) { return r['孩子編號'] === req.cid; });
+    if (rows.some(function (r) { return r['簽退時間']; })) return { ok: false, error: 'checked_out' };
+    if (rows.length) ensureHeader_(SHEET.LOG, '取消簽到');
+    rows.forEach(function (r) { setCell_(SHEET.LOG, r._row, '取消簽到', now); });
+    return { ok: true };   // 已經不是簽到狀態（例如別的同工剛取消）也算成功
+  } finally { lock.releaseLock(); }
 }
 
 // ───────────────────────── 收款（同工用，需要簽到站密碼）─────────────────────────
@@ -1245,7 +1283,7 @@ function activeKids_(s) {
     return String(e['學年']) === year && e['項目'] === 'Awana' && e['狀態'] === '有效' && kids[e['孩子編號']];
   }).map(function (e) {
     var k = kids[e['孩子編號']];
-    return { cid: k['孩子編號'], fid: k['家庭編號'], name: kidName_(k), cls: e['班別'] || gm[String(e['年級'])] || '' };
+    return { cid: k['孩子編號'], fid: k['家庭編號'], name: kidName_(k), grade: String(e['年級'] || ''), cls: e['班別'] || gm[String(e['年級'])] || '' };
   });
 }
 
@@ -1364,6 +1402,19 @@ function setCell_(name, row, header, value) {
   var sh = SpreadsheetApp.getActive().getSheetByName(name);
   var col = HEADERS[name].indexOf(header) + 1;
   sh.getRange(row, col).setValue(value);
+}
+
+// 舊的試算表新增欄位時，第一列還沒有標題：寫入前補上（讀取是照第一列的標題對應）
+function ensureHeader_(name, header) {
+  var sh = SpreadsheetApp.getActive().getSheetByName(name);
+  var col = HEADERS[name].indexOf(header) + 1;
+  if (String(sh.getRange(1, col).getValue()) !== header) sh.getRange(1, col).setValue(header).setFontWeight('bold');
+}
+
+// 今天的簽到紀錄（不含已取消的）
+function todayLog_(s) {
+  var today = todayStr_(s);
+  return rows_(SHEET.LOG).filter(function (r) { return dateStr_(r['日期'], s) === today && !r['取消簽到']; });
 }
 
 function fullName_(first, last) { return (clean_(first) + ' ' + clean_(last)).trim(); }
