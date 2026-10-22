@@ -62,7 +62,7 @@
   var en = W.lang() === 'en';
   var S = en ? {
     title: 'Class roster', locked: 'Unlock the Kids Staff area first.', toStaff: 'Go to Kids Staff', all: 'All',
-    here: 'here', of: 'of {n}', outN: '{n} checked out', at: 'Updated {t}', refresh: '↻ Refresh', loading: 'Loading…',
+    here: 'here', of: 'of {n}', outN: '{n} checked out', at: 'Updated {t}', refresh: '↻ Refresh', loading: 'Loading…', updating: 'Updating…',
     notIn: 'Not checked in ({n})', inH: 'Checked in ({n})', none: 'No one', noKids: 'No children registered in this class.',
     warn: '⚠ Allergy', noteH: 'Allergies / special needs', inAt: 'Checked in {t}', outAt: 'Checked out {t}',
     via: { 'QR卡': 'QR card', '末四碼': 'phone digits' },
@@ -71,7 +71,7 @@
     undoGo: 'Yes, cancel check-in', undone: 'Check-in cancelled', checked_out: 'Already checked out — can\'t cancel.',
   } : {
     title: '班級名單', locked: '請先在「兒童同工專區」解鎖。', toStaff: '前往兒童同工專區', all: '全部',
-    here: '已到', of: '／共 {n} 位', outN: '已簽退 {n} 位', at: '更新於 {t}', refresh: '↻ 重新整理', loading: '讀取中…',
+    here: '已到', of: '／共 {n} 位', outN: '已簽退 {n} 位', at: '更新於 {t}', refresh: '↻ 重新整理', loading: '讀取中…', updating: '正在更新最新名單…',
     notIn: '還沒簽到（{n}）', inH: '已簽到（{n}）', none: '沒有', noKids: '這個班今年還沒有孩子報名。',
     warn: '⚠ 過敏', noteH: '過敏／特殊需求', inAt: '簽到 {t}', outAt: '已簽退 {t}',
     via: {},
@@ -86,13 +86,45 @@
     try { if (window.WCECApp && window.WCECApp.postMessage) window.WCECApp.postMessage(JSON.stringify({ type: 'title', title: S.title })); } catch (e) {}
   }
 
+  // 打開就先顯示這台手機上次的名單（換日就把簽到狀態清掉），背景再跟後端拿最新的，不用盯著「讀取中」
+  // 存在手機上的名單不含過敏內容；「⚠ 過敏」等最新資料回來才出現
+  var CACHE = 'wcec_classlist';
+  function today() { return new Date().toDateString(); }
+  function cached() {
+    try {
+      var c = JSON.parse(W.store(CACHE) || 'null');
+      if (c && c.kids) {
+        if (c.day !== today()) c.kids.forEach(function (k) { k.checkedIn = k.checkedOut = false; k.inAt = k.outAt = k.via = ''; });
+        c.stale = true;
+        return c;
+      }
+      // 第一次打開：用解鎖時下載的簽到站名單（只有姓名、班別、今天有沒有簽到）
+      var r = JSON.parse(W.store('wcec_roster') || 'null');
+      if (r && r.families && r.families.length) {
+        var same = new Date(r.at).toDateString() === today(), kids = [], classes = [];
+        r.families.forEach(function (f) { f.kids.forEach(function (k) {
+          kids.push({ cid: k.cid, name: k.name, cls: k.cls, checkedIn: same && !!k.checkedIn });
+          if (k.cls && classes.indexOf(k.cls) < 0) classes.push(k.cls);
+        }); });
+        return { classes: classes, kids: kids, stale: true };
+      }
+    } catch (e) {}
+    return null;
+  }
+  function saveCache(r) {
+    W.store(CACHE, JSON.stringify({ day: today(), at: r.at, classes: r.classes,
+      kids: r.kids.map(function (k) { var o = Object.assign({}, k); delete o.note; return o; }) }));
+  }
+  data = key ? cached() : null;
+
   function load() {
     if (!key || busy) return;
     busy = true;
+    if (data) render();   // 「重新整理」改成「讀取中…」
     W.call('classList', { key: key }).then(function (r) {
       busy = false;
-      if (r.ok) { data = r; err = ''; }
-      else if (r.error === 'bad_key' || r.error === 'not_configured') { key = ''; W.forget('wcec_station_key'); }
+      if (r.ok) { data = r; err = ''; saveCache(r); }
+      else if (r.error === 'bad_key' || r.error === 'not_configured') { key = ''; data = null; W.forget('wcec_station_key'); W.forget(CACHE); }
       else err = W.errText(r.error);
       render();
     });
@@ -140,7 +172,7 @@
     var pct = kids.length ? Math.round(inK.length / kids.length * 100) : 0;
     h += '<section class="sum"><div class="big"><b>' + inK.length + '</b><span>' + esc(S.here) + esc(fill(S.of, { n: kids.length })) + '</span></div>' +
       '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
-      '<div class="meta"><span>' + (outN ? esc(fill(S.outN, { n: outN })) + ' · ' : '') + esc(fill(S.at, { t: data.at })) + '</span>' +
+      '<div class="meta"><span>' + (outN ? esc(fill(S.outN, { n: outN })) + ' · ' : '') + esc(data.stale && busy ? S.updating : data.at ? fill(S.at, { t: data.at }) : '') + '</span>' +
       '<button type="button" class="refresh" id="refresh">' + esc(busy ? S.loading : S.refresh) + '</button></div></section>';
 
     if (!kids.length) h += '<div class="list"><div class="empty">' + esc(S.noKids) + '</div></div>';

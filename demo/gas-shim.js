@@ -55,6 +55,7 @@
     return {
       getName: function () { return name; },
       getLastRow: function () { return rows.length; },
+      getLastColumn: function () { return rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0); },
       appendRow: function (a) { rows.push(a.slice()); return this; },
       setFrozenRows: function () {},
       getDataRange: function () {

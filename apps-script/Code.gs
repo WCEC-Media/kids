@@ -91,7 +91,7 @@ function onOpen() {
 }
 
 // Apps Script 太久沒人用會「睡著」，第一個人要等十幾秒。每 5 分鐘喚醒一次，家長和簽到站就不用等那麼久
-function keepWarm() { rosterData_(true); }   // 順便把簽到站名單整理好放進快取
+function keepWarm() { rosterData_(true); classStatic_(settings_(), true); }   // 順便把簽到站名單、班級名單整理好放進快取
 function installKeepWarm() {
   ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === 'keepWarm') ScriptApp.deleteTrigger(tr); });
   ScriptApp.newTrigger('keepWarm').timeBased().everyMinutes(5).create();
@@ -1133,18 +1133,33 @@ function classList_(req) {
   function hm(v) { return v instanceof Date ? Utilities.formatDate(v, tz, 'h:mm a') : ''; }
   var log = {};
   todayLog_(s).forEach(function (r) { log[r['孩子編號']] = r; });
-  var notes = {};
-  rows_(SHEET.KIDS).forEach(function (k) { notes[k['孩子編號']] = clean_(k['過敏/特殊需求']); });
-  var kids = activeKids_(s).map(function (k) {
+  var st = classStatic_(s);
+  var kids = st.kids.map(function (k) {
     var r = log[k.cid];
-    return { cid: k.cid, name: k.name, cls: k.cls, grade: k.grade, note: notes[k.cid] || '',
+    return { cid: k.cid, name: k.name, cls: k.cls, grade: k.grade, note: k.note,
              checkedIn: !!r, inAt: r ? hm(r['簽到時間']) : '', via: r ? String(r['簽到方式'] || '') : '',
              checkedOut: !!(r && r['簽退時間']), outAt: r ? hm(r['簽退時間']) : '' };
   });
+  return { ok: true, date: todayStr_(s), at: hm(new Date()), classes: st.classes, kids: kids };
+}
+
+// 班級名單裡不常變的部分（孩子、班別、年級、過敏）：放在快取 6 分鐘，簽到時不清掉（keepWarm 每 5 分鐘重新整理）
+// 所以剛報名或剛改資料的孩子，最多 6 分鐘後才會出現在班級名單；簽到狀態每次都是最新的
+function classStatic_(s, rebuild) {
+  var cache = CacheService.getScriptCache();
+  if (!rebuild) {
+    var hit = cache.get('classStatic');
+    if (hit) return JSON.parse(hit);
+  }
+  var notes = {};
+  rows_(SHEET.KIDS).forEach(function (k) { notes[k['孩子編號']] = clean_(k['過敏/特殊需求']); });
+  var kids = activeKids_(s).map(function (k) { return { cid: k.cid, name: k.name, cls: k.cls, grade: k.grade, note: notes[k.cid] || '' }; });
   // 班別照「班別」工作表的順序（Puggles → T&T）；工作表裡沒有的班別排在最後
   var classes = [];
   grades_().concat(kids).forEach(function (g) { if (g.cls && classes.indexOf(g.cls) < 0) classes.push(g.cls); });
-  return { ok: true, date: todayStr_(s), at: hm(new Date()), classes: classes, kids: kids };
+  var data = { kids: kids, classes: classes };
+  if (kids.length) { try { cache.put('classStatic', JSON.stringify(data), 360); } catch (e) {} }
+  return data;
 }
 
 // 取消簽到（孩子沒來卻被簽到了）：不刪掉那一列，在「取消簽到」欄寫下時間，試算表裡還查得到
@@ -1412,9 +1427,31 @@ function ensureHeader_(name, header) {
 }
 
 // 今天的簽到紀錄（不含已取消的）
+// 簽到紀錄每週都在變長，不讀整張表：從最下面一次讀 200 列往上找，讀到今天以前的紀錄就停
 function todayLog_(s) {
-  var today = todayStr_(s);
-  return rows_(SHEET.LOG).filter(function (r) { return dateStr_(r['日期'], s) === today && !r['取消簽到']; });
+  var today = todayStr_(s), memo = 'today:' + SHEET.LOG;
+  if (!_MEMO[memo]) {
+    var sh = SpreadsheetApp.getActive().getSheetByName(SHEET.LOG), out = [];
+    var end = sh ? sh.getLastRow() : 0;
+    if (end >= 2) {
+      var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0], done = false;
+      while (end >= 2 && !done) {
+        var start = Math.max(2, end - 199);
+        var vals = sh.getRange(start, 1, end - start + 1, head.length).getValues();
+        for (var i = vals.length - 1; i >= 0; i--) {
+          var d = dateStr_(vals[i][0], s);
+          if (d === today) {
+            var o = { _row: start + i }, v = vals[i];
+            head.forEach(function (h, j) { o[h] = v[j]; });
+            out.push(o);
+          } else if (d && d < today) { done = true; break; }   // 空白列略過
+        }
+        end = start - 1;
+      }
+    }
+    _MEMO[memo] = out.reverse();
+  }
+  return _MEMO[memo].filter(function (r) { return !r['取消簽到']; });
 }
 
 function fullName_(first, last) { return (clean_(first) + ' ' + clean_(last)).trim(); }

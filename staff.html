@@ -109,7 +109,7 @@
       '<button class="lockbtn" id="lock" type="button">' + IC.lock + esc(S.lock) + '</button><p class="note">' + esc(S.lockedNote) + '</p>';
     app.innerHTML = h;
     document.getElementById('lock').onclick = function () {
-      key = ''; W.forget('wcec_station_key'); W.forget('wcec_roster'); W.forget('wcec_staff_name'); render();
+      key = ''; W.forget('wcec_station_key'); W.forget('wcec_roster'); W.forget('wcec_classlist'); W.forget('wcec_staff_name'); render();
     };
   }
   render();
