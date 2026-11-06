@@ -8,6 +8,9 @@
 #
 # 安全檢查：如果試算表上的 Code.gs 有人直接在 Apps Script 編輯器改過（跟 GitHub 上一版不同），
 # 會停下來不覆蓋，避免把手動修改蓋掉。確認可以覆蓋後，手動執行時勾選「force」。
+#
+# 新程式需要新的 Google 權限時（例如寫入 Firebase）：只上傳程式、不發布，正式網站繼續用舊版，不會中斷。
+# 請到 Apps Script 編輯器執行一次程式並按「允許」，再到 Actions 手動執行並勾選「publish_only」發布。
 name: 更新 Apps Script 後端
 
 on:
@@ -20,6 +23,10 @@ on:
         description: 試算表上的 Code.gs 跟 GitHub 不同時，仍然覆蓋
         type: boolean
         default: false
+      publish_only:
+        description: 只發布已經上傳的程式（在 Apps Script 編輯器授權新權限之後用）
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-apps-script
@@ -29,6 +36,15 @@ env:
   SCRIPT_ID: 1LuVWNx7e135F9pqt2vQuy5gQ-_mPP01gXfjUYlyUDTjp3KnpoZs-1YkE
   DEPLOYMENT_ID: AKfycbyhqF2Pu6F_sJ2X0Mf9LIDCGUBFTWNdhOXGL_fp5FAEU1pnWneoNV6SET8sCv1p3LvsRg
   CLASP: npx --yes @google/clasp@3.4.1
+  # 後端用到的 Google 權限（試算表、選單、寄信、Drive 存簽名、觸發器、連外、Firebase）
+  SCOPES: >-
+    https://www.googleapis.com/auth/spreadsheets
+    https://www.googleapis.com/auth/script.container.ui
+    https://www.googleapis.com/auth/script.send_mail
+    https://www.googleapis.com/auth/drive
+    https://www.googleapis.com/auth/script.scriptapp
+    https://www.googleapis.com/auth/script.external_request
+    https://www.googleapis.com/auth/datastore
 
 jobs:
   deploy:
@@ -64,6 +80,7 @@ jobs:
 
       - name: 比對線上版本
         id: check
+        if: inputs.publish_only != true
         env:
           BEFORE: ${{ github.event.before }}
           FORCE: ${{ inputs.force }}
@@ -99,30 +116,50 @@ jobs:
 
       # 線上的 appsscript.json 沒有網頁應用程式設定時，補上跟 README 一樣的設定（執行身分「我」、存取權「所有人」），
       # 避免更新部署作業時存取權被改掉，家長和簽到站就連不到
-      - name: 確認網頁應用程式設定
-        if: steps.check.outputs.skip != 'true'
+      # 也確認需要的權限都列在 appsscript.json；有新增的權限就要先在編輯器授權，才能發布
+      - name: 確認網頁應用程式設定和權限
+        id: manifest
+        if: inputs.publish_only != true && steps.check.outputs.skip != 'true'
         run: |
           node -e '
             const fs = require("fs"), f = "build/appsscript.json";
             const m = JSON.parse(fs.readFileSync(f, "utf8"));
             if (!m.webapp) {
               m.webapp = { executeAs: "USER_DEPLOYING", access: "ANYONE_ANONYMOUS" };
-              fs.writeFileSync(f, JSON.stringify(m, null, 2));
               console.log("補上 webapp 設定");
             }
             console.log(JSON.stringify(m.webapp));
+            const need = process.env.SCOPES.split(/\s+/).filter(Boolean);
+            const have = m.oauthScopes || [];
+            const missing = need.filter(x => have.indexOf(x) < 0);
+            m.oauthScopes = have.concat(missing);
+            fs.writeFileSync(f, JSON.stringify(m, null, 2));
+            console.log("權限：" + JSON.stringify(m.oauthScopes));
+            if (missing.length) {
+              console.log("新增的權限：" + missing.join(", "));
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, "needs_auth=true\n");
+            }
           '
 
-      - name: 上傳並發布到原本的部署作業
-        if: steps.check.outputs.skip != 'true'
+      - name: 上傳程式
+        if: inputs.publish_only != true && steps.check.outputs.skip != 'true'
         run: |
           cp apps-script/Code.gs "${{ steps.check.outputs.remote }}"
-          cd build
-          $CLASP push --force
-          $CLASP redeploy "$DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA::7}"
+          cd build && $CLASP push --force
+
+      - name: 新權限要先授權
+        if: steps.manifest.outputs.needs_auth == 'true'
+        run: |
+          echo "::error::程式已經上傳，但需要新的 Google 權限，所以這次「沒有發布」，網站繼續用舊版，不會中斷。請：① 打開兒童事工試算表 → 擴充功能 → Apps Script → 上方選函式「testFirebase」→ 執行 → 按「允許」；② 回到 Actions →「更新 Apps Script 後端」→ Run workflow，勾選 publish_only 發布。"
+          exit 1
+
+      - name: 發布到原本的部署作業
+        if: inputs.publish_only == true || (steps.check.outputs.skip != 'true' && steps.manifest.outputs.needs_auth != 'true')
+        run: |
+          cd build && $CLASP redeploy "$DEPLOYMENT_ID" --description "GitHub ${GITHUB_SHA::7}"
 
       - name: 確認後端可以連線
-        if: steps.check.outputs.skip != 'true'
+        if: inputs.publish_only == true || (steps.check.outputs.skip != 'true' && steps.manifest.outputs.needs_auth != 'true')
         run: |
           sleep 5
           body=$(curl -fsSL "https://script.google.com/macros/s/$DEPLOYMENT_ID/exec")

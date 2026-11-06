@@ -36,7 +36,7 @@
       else render();
     }
   }
-  function forgetRoster() { roster = null; others = []; rosterAt = 0; W.forget('wcec_roster'); W.forget('wcec_classlist'); }
+  function forgetRoster() { roster = null; others = []; rosterAt = 0; W.forget('wcec_roster'); W.forget('wcec_classlist'); W.forget('wcec_classlist_fs'); }
   if (key) { try { var saved = JSON.parse(W.store('wcec_roster') || 'null'); if (saved && saved.families) useRoster(saved, saved.at); } catch (e) {} }
   function loadRoster() {
     if (!key) return Promise.resolve(null);

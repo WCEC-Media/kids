@@ -64,7 +64,7 @@
     title: 'Class roster', locked: 'Unlock the Kids Staff area first.', toStaff: 'Go to Kids Staff', all: 'All',
     here: 'here', of: 'of {n}', outN: '{n} checked out', at: 'Updated {t}', refresh: '↻ Refresh', loading: 'Loading…', updating: 'Updating…',
     notIn: 'Not checked in ({n})', inH: 'Checked in ({n})', none: 'No one', noKids: 'No children registered in this class.',
-    warn: '⚠ Allergy', noteH: 'Allergies / special needs', inAt: 'Checked in {t}', outAt: 'Checked out {t}',
+    warn: '⚠ Allergy', noteH: 'Allergies / special needs', noteWait: 'Loading… please tap again in a few seconds.', inAt: 'Checked in {t}', outAt: 'Checked out {t}',
     via: { 'QR卡': 'QR card', '末四碼': 'phone digits' },
     undo: 'Cancel check-in (not here today)', undoQ: 'Cancel today\'s check-in for {n}?',
     undoP: 'Only do this if the child is not actually here. The record stays in the spreadsheet, and the child can check in again later.',
@@ -73,7 +73,7 @@
     title: '班級名單', locked: '請先在「兒童同工專區」解鎖。', toStaff: '前往兒童同工專區', all: '全部',
     here: '已到', of: '／共 {n} 位', outN: '已簽退 {n} 位', at: '更新於 {t}', refresh: '↻ 重新整理', loading: '讀取中…', updating: '正在更新最新名單…',
     notIn: '還沒簽到（{n}）', inH: '已簽到（{n}）', none: '沒有', noKids: '這個班今年還沒有孩子報名。',
-    warn: '⚠ 過敏', noteH: '過敏／特殊需求', inAt: '簽到 {t}', outAt: '已簽退 {t}',
+    warn: '⚠ 過敏', noteH: '過敏／特殊需求', noteWait: '讀取中…請過幾秒再點一次。', inAt: '簽到 {t}', outAt: '已簽退 {t}',
     via: {},
     undo: '取消簽到（孩子今天沒來）', undoQ: '確定要取消 {n} 今天的簽到嗎？',
     undoP: '只有孩子今天其實沒來時才需要取消。試算表仍會留下紀錄；孩子之後真的來了，可以再簽到。',
@@ -86,10 +86,15 @@
     try { if (window.WCECApp && window.WCECApp.postMessage) window.WCECApp.postMessage(JSON.stringify({ type: 'title', title: S.title })); } catch (e) {}
   }
 
-  // 打開就先顯示這台手機上次的名單（換日就把簽到狀態清掉），背景再跟後端拿最新的，不用盯著「讀取中」
-  // 存在手機上的名單不含過敏內容；「⚠ 過敏」等最新資料回來才出現
-  var CACHE = 'wcec_classlist';
+  // 載入順序（越前面越快）：
+  //   1. 這台手機上次的名單（馬上顯示；換日就把簽到狀態清掉）
+  //   2. Firebase 上的名單（不到 1 秒；後端每次簽到、簽退、取消簽到後都會更新）
+  //   3. Apps Script（要幾秒；最準，也帶過敏內容）
+  // 存在手機上的名單不含過敏內容；過敏內容只放在記憶體，從 Apps Script 來
+  var CACHE = 'wcec_classlist', FS = 'wcec_classlist_fs', notes = {};
   function today() { return new Date().toDateString(); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function todayISO() { var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
   function cached() {
     try {
       var c = JSON.parse(W.store(CACHE) || 'null');
@@ -112,10 +117,34 @@
     return null;
   }
   function saveCache(r) {
-    W.store(CACHE, JSON.stringify({ day: today(), at: r.at, classes: r.classes,
+    W.store(CACHE, JSON.stringify({ day: today(), at: r.at, ts: r.ts, classes: r.classes,
       kids: r.kids.map(function (k) { var o = Object.assign({}, k); delete o.note; return o; }) }));
   }
   data = key ? cached() : null;
+
+  // 換上比較新的名單（Firebase 和 Apps Script 誰先回來都可以；舊的不會蓋掉新的）
+  function apply(snap) {
+    if (!snap || !snap.kids) return false;
+    if (data && !data.stale && data.ts && snap.ts && snap.ts < data.ts) return false;
+    if (snap.date && snap.date !== todayISO()) snap.kids.forEach(function (k) { k.checkedIn = k.checkedOut = false; k.inAt = k.outAt = k.via = ''; });
+    snap.kids.forEach(function (k) { if (k.note) notes[k.cid] = k.note; });
+    data = snap; data.stale = false; err = '';
+    saveCache(snap);
+    return true;
+  }
+
+  function fsInfo() { try { return JSON.parse(W.store(FS) || 'null'); } catch (e) { return null; } }
+  function loadFs() {
+    var info = fsInfo();
+    if (!key || !info || !info.doc) return;
+    var get = W.DEMO ? window.WCEC_DEMO.fsGet(info.collection, info.doc)
+      : fetch('https://firestore.googleapis.com/v1/projects/' + encodeURIComponent(info.project) + '/databases/(default)/documents/' +
+              encodeURIComponent(info.collection) + '/' + encodeURIComponent(info.doc)).then(function (r) { return r.ok ? r.json() : null; });
+    get.then(function (d) {
+      var raw = d && d.fields && d.fields.data && d.fields.data.stringValue;
+      if (raw && apply(JSON.parse(raw))) render();
+    }).catch(function () {});   // Firebase 讀不到就等 Apps Script
+  }
 
   function load() {
     if (!key || busy) return;
@@ -123,8 +152,8 @@
     if (data) render();   // 「重新整理」改成「讀取中…」
     W.call('classList', { key: key }).then(function (r) {
       busy = false;
-      if (r.ok) { data = r; err = ''; saveCache(r); }
-      else if (r.error === 'bad_key' || r.error === 'not_configured') { key = ''; data = null; W.forget('wcec_station_key'); W.forget(CACHE); }
+      if (r.ok) { if (r.fs) W.store(FS, JSON.stringify(r.fs)); apply(r); }
+      else if (r.error === 'bad_key' || r.error === 'not_configured') { key = ''; data = null; W.forget('wcec_station_key'); W.forget(CACHE); W.forget(FS); }
       else err = W.errText(r.error);
       render();
     });
@@ -146,7 +175,7 @@
     return '<div class="item ' + state + '" data-c="' + esc(k.cid) + '"' + (state === 'in' ? ' role="button" tabindex="0"' : '') + '>' +
       '<span class="dot" aria-hidden="true">' + (state === 'in' ? '✓' : state === 'out' ? '↗' : '') + '</span>' +
       '<span class="txt"><span class="nm">' + esc(k.name) + '</span><br><span class="mt">' + esc(meta.join(' · ')) + '</span></span>' +
-      (k.note ? '<button type="button" class="warn" data-n="' + esc(k.cid) + '">' + esc(S.warn) + '</button>' : '') +
+      (k.hasNote || k.note ? '<button type="button" class="warn" data-n="' + esc(k.cid) + '">' + esc(S.warn) + '</button>' : '') +
       '</div>';
   }
 
@@ -200,13 +229,14 @@
   function find(cid) { return data.kids.filter(function (k) { return k.cid === cid; })[0]; }
   function showNote(k) {
     if (!k) return;
-    W.dialog({ title: k.name, body: '<p class="hint">' + esc(S.noteH) + '</p><div class="note-box">' + esc(k.note) + '</div>' });
+    var note = notes[k.cid];
+    W.dialog({ title: k.name, body: '<p class="hint">' + esc(S.noteH) + '</p><div class="note-box">' + esc(note || S.noteWait) + '</div>' });
   }
   // 已簽到的孩子：可以取消簽到（孩子今天其實沒來）
   function kidMenu(k) {
     if (!k || !k.checkedIn || k.checkedOut) return;
     var body = '<p>' + esc(fill(S.inAt, { t: k.inAt })) + (k.via ? ' · ' + esc(S.via[k.via] || k.via) : '') + '</p>' +
-      (k.note ? '<p class="hint">' + esc(S.noteH) + '</p><div class="note-box">' + esc(k.note) + '</div>' : '');
+      (k.hasNote || notes[k.cid] ? '<p class="hint">' + esc(S.noteH) + '</p><div class="note-box">' + esc(notes[k.cid] || S.noteWait) + '</div>' : '');
     W.dialog({ title: k.name, body: body, actions: [
       { label: S.undo, onClick: function () { confirmUndo(k); } },
       { label: W.t('close'), kind: 'ghost' },
@@ -219,7 +249,7 @@
         btns.forEach(function (b) { b.disabled = true; });
         W.call('uncheckin', { key: key, cid: k.cid }).then(function (r) {
           close();
-          if (r.ok) { k.checkedIn = false; k.inAt = ''; k.via = ''; W.toast(S.undone); render(); load(); }
+          if (r.ok) { k.checkedIn = false; k.inAt = ''; k.via = ''; data.ts = 0; W.toast(S.undone); render(); load(); }
           else { err = r.error === 'checked_out' ? S.checked_out : W.errText(r.error); render(); load(); }
         });
         return true;   // 等後端回應再關閉
@@ -229,11 +259,15 @@
   }
 
   render();
+  loadFs();
   load();
   // 開著的時候每 45 秒更新一次（其他同工剛簽到的孩子）；切回這個畫面時也更新
-  setInterval(function () { if (!document.hidden && !document.querySelector('.dlg-back')) load(); }, 45000);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
-  addEventListener('pageshow', function (e) { if (e.persisted) { key = W.store('wcec_station_key') || ''; load(); } });
+  // 開著的時候：每 15 秒讀一次 Firebase（很快），每 2 分鐘問一次 Apps Script（補過敏內容、對帳）；切回這個畫面時兩個都讀
+  function idle() { return !document.hidden && !document.querySelector('.dlg-back'); }
+  setInterval(function () { if (idle()) loadFs(); }, 15000);
+  setInterval(function () { if (idle()) load(); }, 120000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { loadFs(); load(); } });
+  addEventListener('pageshow', function (e) { if (e.persisted) { key = W.store('wcec_station_key') || ''; loadFs(); load(); } });
 })();
 </script>
 </body>
