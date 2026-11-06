@@ -55,6 +55,7 @@
     return {
       getName: function () { return name; },
       getLastRow: function () { return rows.length; },
+      getLastColumn: function () { return rows.reduce(function (m, r) { return Math.max(m, r.length); }, 0); },
       appendRow: function (a) { rows.push(a.slice()); return this; },
       setFrozenRows: function () {},
       getDataRange: function () {
@@ -90,6 +91,24 @@
   window.LockService = { getScriptLock: function () { return { waitLock: function () {}, releaseLock: function () {} }; } };
   window.MailApp = { sendEmail: function (o) {
     state.outbox.unshift({ to: o.to, subject: o.subject, html: o.htmlBody || '', text: o.body || '', time: new Date() });
+  } };
+
+  // ── 模擬 PropertiesService、ScriptApp、Firebase（UrlFetchApp 只認 Firestore 的網址，文件存在 state.firestore）──
+  window.PropertiesService = { getScriptProperties: function () {
+    state.props = state.props || {};
+    return {
+      getProperty: function (k) { return state.props[k] == null ? null : state.props[k]; },
+      setProperties: function (o) { Object.keys(o).forEach(function (k) { state.props[k] = String(o[k]); }); },
+    };
+  } };
+  window.ScriptApp = { getOAuthToken: function () { return 'demo-token'; } };
+  window.UrlFetchApp = { fetch: function (url, opt) {
+    var m = /\/documents\/([^/]+)\/([^/?]+)/.exec(url), key = m ? m[1] + '/' + m[2] : '';
+    state.firestore = state.firestore || {};
+    var code = m ? 200 : 404;
+    if (m && opt.method === 'patch') state.firestore[key] = JSON.parse(opt.payload).fields;
+    else if (m && opt.method === 'delete') { if (!state.firestore[key]) code = 404; delete state.firestore[key]; }
+    return { getResponseCode: function () { return code; }, getContentText: function () { return '{}'; } };
   } };
 
   // ── 模擬 DriveApp：簽名圖片存在 state.files ──
@@ -217,6 +236,10 @@
         save();
         return JSON.parse(JSON.stringify(res));   // 跟真的網路回應一樣，日期會變成文字
       });
+    },
+    // 示範模式的「Firebase」：跟 Firestore REST 回傳一樣的格式（找不到就是 null）
+    fsGet: function (collection, doc) {
+      return ready().then(function () { state = load(); var f = state && state.firestore && state.firestore[collection + '/' + doc]; return f ? { fields: f } : null; });
     },
     snapshot: function () { return ready().then(function () { state = load(); if (!state) seed(); return state; }); },
     reset: function () { try { localStorage.removeItem(KEY); } catch (e) {} state = null; return this.snapshot(); },

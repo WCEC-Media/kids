@@ -85,13 +85,19 @@ function onOpen() {
     .addItem('補齊手動輸入的家庭資料', 'fillMissing')
     .addItem('寄續報通知給去年的家庭', 'sendRenewalNotices')
     .addItem('更新收款總覽', 'rebuildPaySummary')
+    .addItem('測試班級名單同步（Firebase）', 'testFirebase')
     .addSeparator()
     .addItem('開啟「保持網站快速」（每 5 分鐘喚醒一次）', 'installKeepWarm')
     .addToUi();
 }
 
 // Apps Script 太久沒人用會「睡著」，第一個人要等十幾秒。每 5 分鐘喚醒一次，家長和簽到站就不用等那麼久
-function keepWarm() { rosterData_(true); }   // 順便把簽到站名單整理好放進快取
+function keepWarm() {   // 順便把簽到站名單、班級名單整理好放進快取，並更新 Firebase 上的班級名單（換日、新報名）
+  rosterData_(true);
+  var s = settings_();
+  classStatic_(s, true);
+  publishClassList_(s);
+}
 function installKeepWarm() {
   ScriptApp.getProjectTriggers().forEach(function (tr) { if (tr.getHandlerFunction() === 'keepWarm') ScriptApp.deleteTrigger(tr); });
   ScriptApp.newTrigger('keepWarm').timeBased().everyMinutes(5).create();
@@ -970,7 +976,8 @@ function checkStation_(req) {
 
 function unlock_(req) {
   var err = checkStation_(req);
-  return err ? { ok: false, error: err } : Object.assign({ ok: true }, rosterData_());   // 解鎖時順便帶回名單
+  if (err) return { ok: false, error: err };
+  return Object.assign({ ok: true, fs: fsInfo_(settings_()) }, rosterData_());   // 解鎖時順便帶回名單、班級名單在 Firebase 的位置
 }
 
 function lookup_(req) {
@@ -1087,6 +1094,7 @@ function checkout_(req) {
       }
       done.push({ name: r['孩子姓名'], cls: r['班別'] });
     });
+    if (done.length) publishClassList_(s);
     return { ok: true, kids: done };
   } finally { lock.releaseLock(); }
 }
@@ -1117,6 +1125,7 @@ function checkin_(req) {
       }
       done.push({ name: k.name, cls: k.cls });
     });
+    if (done.length) publishClassList_(s);
     return { ok: true, kids: done };
   } finally {
     lock.releaseLock();
@@ -1129,22 +1138,104 @@ function checkin_(req) {
 function classList_(req) {
   var err = checkStation_(req);
   if (err) return { ok: false, error: err };
-  var s = settings_(), tz = tz_(s);
+  var s = settings_();
+  return Object.assign({ ok: true, fs: fsInfo_(s) }, classSnapshot_(s, true));
+}
+
+// 班級名單的內容。withNotes = false 是放到 Firebase 的版本：過敏只寫「有沒有」（hasNote），不寫內容
+function classSnapshot_(s, withNotes) {
+  var tz = tz_(s);
   function hm(v) { return v instanceof Date ? Utilities.formatDate(v, tz, 'h:mm a') : ''; }
   var log = {};
   todayLog_(s).forEach(function (r) { log[r['孩子編號']] = r; });
+  var st = classStatic_(s);
+  var kids = st.kids.map(function (k) {
+    var r = log[k.cid];
+    var o = { cid: k.cid, name: k.name, cls: k.cls, grade: k.grade, hasNote: !!k.note,
+              checkedIn: !!r, inAt: r ? hm(r['簽到時間']) : '', via: r ? String(r['簽到方式'] || '') : '',
+              checkedOut: !!(r && r['簽退時間']), outAt: r ? hm(r['簽退時間']) : '' };
+    if (withNotes) o.note = k.note;
+    return o;
+  });
+  return { date: todayStr_(s), at: hm(new Date()), ts: Date.now(), classes: st.classes, kids: kids };
+}
+
+// ───────────────────────── 班級名單同步到 Firebase ─────────────────────────
+// 老師打開班級名單時直接從 Firebase 讀（不到 1 秒），不用等 Apps Script；簽到、簽退、取消簽到後馬上更新，keepWarm 每 5 分鐘也會更新
+// 放上去的只有孩子姓名、班別、年級、今天的簽到／簽退時間；沒有家長資料、電話，過敏只寫「有沒有」
+// 文件編號是隨機的長字串，只有輸入過簽到站密碼的裝置拿得到；Firestore 規則只能用完整編號讀那一份，不能列出（church-app 的 firestore.rules）
+// 換了簽到站密碼就換新編號、刪掉舊的，舊手機就讀不到
+// Firebase 沒設定好或沒權限時只記錄錯誤，不影響簽到；10 分鐘內不再重試
+var FS_PROJECT = 'wcec-church-app', FS_COLLECTION = 'kidsClassList';
+
+function fsInfo_(s) {
+  try { return { project: FS_PROJECT, collection: FS_COLLECTION, doc: classListDocId_(s) }; } catch (e) { return null; }
+}
+
+function classListDocId_(s) {
+  var props = PropertiesService.getScriptProperties();
+  var pw = hash_(String(s['簽到站密碼'] || ''));
+  var id = props.getProperty('classListDoc');
+  if (!id || props.getProperty('classListDocPw') !== pw) {
+    if (id) { try { fsCall_('delete', id); } catch (e) { console.error('delete old class list doc failed', e); } }
+    id = uuid_() + uuid_();
+    props.setProperties({ classListDoc: id, classListDocPw: pw });
+  }
+  return id;
+}
+
+function publishClassList_(s, strict) {
+  var cache = CacheService.getScriptCache();
+  if (!strict && cache.get('fsFail')) return;
+  try {
+    fsCall_('patch', classListDocId_(s), { fields: {
+      data: { stringValue: JSON.stringify(classSnapshot_(s, false)) },
+      updatedAt: { timestampValue: new Date().toISOString() },
+    } });
+    cache.remove('fsFail');
+  } catch (e) {
+    cache.put('fsFail', '1', 600);
+    console.error('publishClassList failed', e);
+    if (strict) throw e;
+  }
+}
+
+function fsCall_(method, id, payload) {
+  var opt = { method: method, contentType: 'application/json', muteHttpExceptions: true,
+              headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } };
+  if (payload) opt.payload = JSON.stringify(payload);
+  var res = UrlFetchApp.fetch('https://firestore.googleapis.com/v1/projects/' + FS_PROJECT + '/databases/(default)/documents/' +
+                              FS_COLLECTION + '/' + id, opt);
+  var code = res.getResponseCode();
+  if (code === 401 || code === 403) throw new Error('沒有權限寫入 Firebase。請確認這張試算表的擁有者帳號，在 Firebase 專案 ' + FS_PROJECT + ' 裡有權限。');
+  if (code >= 300 && !(method === 'delete' && code === 404)) throw new Error('Firebase 回應錯誤 ' + code + '：' + res.getContentText().slice(0, 200));
+}
+
+// 選單「測試班級名單同步（Firebase）」：第一次執行會要求授權（連外、Firebase），之後確認寫得進去
+function testFirebase() {
+  var s = settings_();
+  publishClassList_(s, true);
+  var msg = '班級名單已同步到 Firebase。';
+  try { SpreadsheetApp.getUi().alert(msg); } catch (e) { console.log(msg); }   // 從 Apps Script 編輯器執行時沒有試算表畫面
+}
+
+// 班級名單裡不常變的部分（孩子、班別、年級、過敏）：放在快取 6 分鐘，簽到時不清掉（keepWarm 每 5 分鐘重新整理）
+// 所以剛報名或剛改資料的孩子，最多 6 分鐘後才會出現在班級名單；簽到狀態每次都是最新的
+function classStatic_(s, rebuild) {
+  var cache = CacheService.getScriptCache();
+  if (!rebuild) {
+    var hit = cache.get('classStatic');
+    if (hit) return JSON.parse(hit);
+  }
   var notes = {};
   rows_(SHEET.KIDS).forEach(function (k) { notes[k['孩子編號']] = clean_(k['過敏/特殊需求']); });
-  var kids = activeKids_(s).map(function (k) {
-    var r = log[k.cid];
-    return { cid: k.cid, name: k.name, cls: k.cls, grade: k.grade, note: notes[k.cid] || '',
-             checkedIn: !!r, inAt: r ? hm(r['簽到時間']) : '', via: r ? String(r['簽到方式'] || '') : '',
-             checkedOut: !!(r && r['簽退時間']), outAt: r ? hm(r['簽退時間']) : '' };
-  });
+  var kids = activeKids_(s).map(function (k) { return { cid: k.cid, name: k.name, cls: k.cls, grade: k.grade, note: notes[k.cid] || '' }; });
   // 班別照「班別」工作表的順序（Puggles → T&T）；工作表裡沒有的班別排在最後
   var classes = [];
   grades_().concat(kids).forEach(function (g) { if (g.cls && classes.indexOf(g.cls) < 0) classes.push(g.cls); });
-  return { ok: true, date: todayStr_(s), at: hm(new Date()), classes: classes, kids: kids };
+  var data = { kids: kids, classes: classes };
+  if (kids.length) { try { cache.put('classStatic', JSON.stringify(data), 360); } catch (e) {} }
+  return data;
 }
 
 // 取消簽到（孩子沒來卻被簽到了）：不刪掉那一列，在「取消簽到」欄寫下時間，試算表裡還查得到
@@ -1162,6 +1253,7 @@ function uncheckin_(req) {
     if (rows.some(function (r) { return r['簽退時間']; })) return { ok: false, error: 'checked_out' };
     if (rows.length) ensureHeader_(SHEET.LOG, '取消簽到');
     rows.forEach(function (r) { setCell_(SHEET.LOG, r._row, '取消簽到', now); });
+    if (rows.length) publishClassList_(s);
     return { ok: true };   // 已經不是簽到狀態（例如別的同工剛取消）也算成功
   } finally { lock.releaseLock(); }
 }
@@ -1412,9 +1504,31 @@ function ensureHeader_(name, header) {
 }
 
 // 今天的簽到紀錄（不含已取消的）
+// 簽到紀錄每週都在變長，不讀整張表：從最下面一次讀 200 列往上找，讀到今天以前的紀錄就停
 function todayLog_(s) {
-  var today = todayStr_(s);
-  return rows_(SHEET.LOG).filter(function (r) { return dateStr_(r['日期'], s) === today && !r['取消簽到']; });
+  var today = todayStr_(s), memo = 'today:' + SHEET.LOG;
+  if (!_MEMO[memo]) {
+    var sh = SpreadsheetApp.getActive().getSheetByName(SHEET.LOG), out = [];
+    var end = sh ? sh.getLastRow() : 0;
+    if (end >= 2) {
+      var head = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0], done = false;
+      while (end >= 2 && !done) {
+        var start = Math.max(2, end - 199);
+        var vals = sh.getRange(start, 1, end - start + 1, head.length).getValues();
+        for (var i = vals.length - 1; i >= 0; i--) {
+          var d = dateStr_(vals[i][0], s);
+          if (d === today) {
+            var o = { _row: start + i }, v = vals[i];
+            head.forEach(function (h, j) { o[h] = v[j]; });
+            out.push(o);
+          } else if (d && d < today) { done = true; break; }   // 空白列略過
+        }
+        end = start - 1;
+      }
+    }
+    _MEMO[memo] = out.reverse();
+  }
+  return _MEMO[memo].filter(function (r) { return !r['取消簽到']; });
 }
 
 function fullName_(first, last) { return (clean_(first) + ' ' + clean_(last)).trim(); }
